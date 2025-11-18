@@ -1,0 +1,14 @@
+[env]
+DATABASE_URL="postgres://postgres:loopdedupedev@localhost:5432/postgres"
+_.file = 'secret.env'
+
+[tasks.dev]
+depends = "dev:postgres"
+run = "gleam run"
+
+[tasks."dev:postgres"]
+run = "docker compose up -d"
+
+[tools]
+erlang = "latest"
+rebar = "latest"
