@@ -1,22 +1,22 @@
-import mist
-import wisp/wisp_mist
-import envoy
+import config
+import database/repository
 import gleam/erlang/process
+import gleam/http.{Get}
+import gleam/json
+import mist
 import pog
 import wisp.{type Request, type Response}
-import gleam/json
-import database/repository
-import gleam/http.{Get}
+import wisp/wisp_mist
 
 pub type Context {
   Context(db: pog.Connection)
 }
 
 pub fn supervised(db_name: process.Name(pog.Message)) {
-  let assert Ok(secret) = envoy.get("SECRET_KEY_BASE")
+  let secret = config.get_env(config.SecretKey)
   let db = pog.named_connection(db_name)
   let ctx = Context(db:)
-  let handler = fn(req) { handle_request(req, ctx)}
+  let handler = fn(req) { handle_request(req, ctx) }
 
   wisp_mist.handler(handler, secret)
   |> mist.new
