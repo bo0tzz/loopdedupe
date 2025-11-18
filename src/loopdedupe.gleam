@@ -1,39 +1,21 @@
-// src/app.gleam
-import database/connection
-import envoy
-import gleam/erlang/process
+import api/router
+import pog
 import gleam/otp/static_supervisor
-import gleam/result
-import mist
+import database/connection
+import gleam/erlang/process
 import wisp
-import wisp/wisp_mist
 
 pub fn main() {
   wisp.configure_logger()
-  let assert Ok(#(_, db)) = start_supervisor()
-
-  let assert Ok(secret) = envoy.get("SECRET_KEY_BASE")
-
-  let assert Ok(_) =
-    wisp_mist.handler(handle_request, secret)
-    |> mist.new
-    |> mist.port(8000)
-    |> mist.start
+  let db_name = process.new_name("database")
+  let assert Ok(_) = start_supervisor(db_name)
 
   process.sleep_forever()
 }
 
-fn start_supervisor() {
-  let supervisor = static_supervisor.new(static_supervisor.RestForOne)
-  use #(supervisor, db) <- result.try(connection.supervised(supervisor))
-
-  let supervisor = static_supervisor.start(supervisor)
-  let conn = connection.init(db)
-
-  Ok(#(supervisor, conn))
-}
-
-fn handle_request(_req: wisp.Request) -> wisp.Response {
-  wisp.response(200)
-  |> wisp.string_body("Hello!")
+fn start_supervisor(db_name: process.Name(pog.Message)) {
+  static_supervisor.new(static_supervisor.RestForOne)
+  |> static_supervisor.add(connection.supervised(db_name))
+  |> static_supervisor.add(router.supervised(db_name))
+  |> static_supervisor.start()
 }

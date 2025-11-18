@@ -4,7 +4,7 @@ CREATE TABLE repositories
     github_id  BIGINT PRIMARY KEY,
     owner      TEXT        NOT NULL,
     name       TEXT        NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE TYPE github_state AS ENUM ('open', 'closed');
@@ -20,8 +20,8 @@ CREATE TABLE items
     body          TEXT,
     state         github_state NOT NULL,
     state_reason  github_state_reason,
-    created_at    TIMESTAMPTZ  NOT NULL,
-    updated_at    TIMESTAMPTZ  NOT NULL,
+    created_at    TIMESTAMP  NOT NULL,
+    updated_at    TIMESTAMP  NOT NULL,
     PRIMARY KEY (repository_id, number)
 );
 

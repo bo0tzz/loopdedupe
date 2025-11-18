@@ -3,7 +3,7 @@ DATABASE_URL="postgres://postgres:loopdedupedev@localhost:5432/postgres"
 _.file = 'secret.env'
 
 [tasks.dev]
-depends = "dev:postgres"
+depends = ["dev:postgres", "generate:sql"]
 run = "gleam run"
 description = "run dev server"
 
@@ -11,12 +11,18 @@ description = "run dev server"
 run = "docker compose up -d"
 description = "start postgres for dev server"
 
-[tasks."migrations:new"]
+[tasks."generate:migration"]
 run = "gleam run -m cigogne new --name ${usage_name}"
 description = "generate new migration file"
 usage = '''
 arg "name" help="Name of the new migration"
 '''
+
+[tasks."generate:sql"]
+run = "gleam run -m squirrel"
+description = "generate sql bindings"
+sources = ["src/database/sql/**"]
+outputs = ["src/database/sql.gleam"]
 
 [tools]
 erlang = "latest"
