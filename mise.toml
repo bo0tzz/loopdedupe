@@ -5,10 +5,20 @@ _.file = 'secret.env'
 [tasks.dev]
 depends = "dev:postgres"
 run = "gleam run"
+description = "run dev server"
 
 [tasks."dev:postgres"]
 run = "docker compose up -d"
+description = "start postgres for dev server"
+
+[tasks."migrations:new"]
+run = "gleam run -m cigogne new --name ${usage_name}"
+description = "generate new migration file"
+usage = '''
+arg "name" help="Name of the new migration"
+'''
 
 [tools]
 erlang = "latest"
 rebar = "latest"
+usage = "latest"
