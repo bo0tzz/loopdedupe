@@ -6,22 +6,22 @@ _.file = 'secret.env'
 [tasks.dev]
 depends = ["dev:postgres", "generate:sql"]
 run = "gleam run"
-description = "run dev server"
+description = "Run dev server"
 
 [tasks."dev:postgres"]
 run = "docker compose up -d"
-description = "start postgres for dev server"
+description = "Start postgres for dev server"
 
 [tasks."generate:migration"]
 run = "gleam run -m cigogne new --name ${usage_name}"
-description = "generate new migration file"
+description = "Generate new migration file"
 usage = '''
 arg "name" help="Name of the new migration"
 '''
 
 [tasks."generate:sql"]
 run = "gleam run -m squirrel"
-description = "generate sql bindings"
+description = "Generate sql bindings"
 sources = ["src/database/sql/**"]
 outputs = ["src/database/sql.gleam"]
 
