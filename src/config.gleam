@@ -5,6 +5,7 @@ pub type Env {
   DatabaseUrl
   SecretKey
   Environment
+  GithubWebhookSecret
 }
 
 fn env_to_string(env: Env) -> String {
@@ -12,6 +13,7 @@ fn env_to_string(env: Env) -> String {
     SecretKey -> "SECRET_KEY_BASE"
     DatabaseUrl -> "DATABASE_URL"
     Environment -> "ENVIRONMENT"
+    GithubWebhookSecret -> "GITHUB_WEBHOOK_SECRET"
   }
 }
 

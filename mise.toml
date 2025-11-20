@@ -12,6 +12,18 @@ description = "Run dev server"
 run = "docker compose up -d"
 description = "Start postgres for dev server"
 
+[tasks."dev:postgres:down"]
+run = "docker compose down -v"
+description = "Destroy dev postgres instance"
+
+[tasks."dev:reset"]
+run = [
+    { task = "dev:postgres:down"},
+    { task = "dev:postgres"},
+    "gleam run -m cigogne up",
+    { task = "generate:sql"}
+]
+
 [tasks."generate:migration"]
 run = "gleam run -m cigogne new --name ${usage_name}"
 description = "Generate new migration file"
@@ -22,8 +34,6 @@ arg "name" help="Name of the new migration"
 [tasks."generate:sql"]
 run = "gleam run -m squirrel"
 description = "Generate sql bindings"
-sources = ["src/database/sql/**"]
-outputs = ["src/database/sql.gleam"]
 
 [tools]
 erlang = "latest"
