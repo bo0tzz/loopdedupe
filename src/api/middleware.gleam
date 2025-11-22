@@ -10,13 +10,7 @@ pub fn require_github_signature(
   body: String,
   handler: fn() -> wisp.Response,
 ) -> wisp.Response {
-  use <-
-    fn(continue) {
-      case config.is_dev() {
-        True -> handler()
-        False -> continue()
-      }
-    }
+  use <- bool.guard(when: config.is_dev(), return: handler())
 
   let is_valid = case list.key_find(headers, "x-hub-signature-256") {
     Ok(signature) -> validate_signature(body, signature)

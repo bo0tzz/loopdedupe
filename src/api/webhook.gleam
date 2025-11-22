@@ -7,6 +7,7 @@ import gleam/json
 import gleam/list
 import gleam/result
 import gleam/string
+import jobs/embeddings
 import snag
 import wisp.{type Request, type Response}
 
@@ -34,10 +35,13 @@ fn log_request(headers: List(#(String, String)), body: String) {
 
 //TODO: Move to svc layer?
 fn parse_and_upsert_webhook(body: String, ctx: Context) {
-//  use webhook <- result.try(
-//    json.parse(body, github.issue_webhook_decoder())
-//    |> snag.replace_error("failed to decode webhook")
-//  )
-  let assert Ok(webhook) = json.parse(body, github.issue_webhook_decoder())
-  item.upsert(ctx.db, webhook.issue) |> snag.replace_error("failed to insert")
+  use webhook <- result.try(
+    json.parse(body, github.issue_webhook_decoder())
+    |> snag.map_error(string.inspect),
+  )
+  use _ <- result.try(
+    item.upsert(ctx.db, webhook.issue) |> snag.map_error(string.inspect),
+  )
+  embeddings.enqueue(ctx.db, webhook.issue.github_id)
+  |> snag.map_error(string.inspect)
 }
