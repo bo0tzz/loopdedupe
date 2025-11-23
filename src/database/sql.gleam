@@ -66,6 +66,65 @@ pub fn list_items(
   |> pog.execute(db)
 }
 
+/// A row you get from running the `select_item` query
+/// defined in `./src/database/sql/select_item.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type SelectItemRow {
+  SelectItemRow(
+    github_id: Int,
+    number: Int,
+    title: String,
+    body: String,
+    state: GithubState,
+    state_reason: Option(GithubStateReason),
+    url: String,
+  )
+}
+
+/// Runs the `select_item` query
+/// defined in `./src/database/sql/select_item.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn select_item(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(SelectItemRow), pog.QueryError) {
+  let decoder = {
+    use github_id <- decode.field(0, decode.int)
+    use number <- decode.field(1, decode.int)
+    use title <- decode.field(2, decode.string)
+    use body <- decode.field(3, decode.string)
+    use state <- decode.field(4, github_state_decoder())
+    use state_reason <- decode.field(
+      5,
+      decode.optional(github_state_reason_decoder()),
+    )
+    use url <- decode.field(6, decode.string)
+    decode.success(SelectItemRow(
+      github_id:,
+      number:,
+      title:,
+      body:,
+      state:,
+      state_reason:,
+      url:,
+    ))
+  }
+
+  "SELECT github_id, number, title, body, state, state_reason, url
+FROM items
+WHERE github_id = $1;"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// Runs the `upsert_item` query
 /// defined in `./src/database/sql/upsert_item.sql`.
 ///

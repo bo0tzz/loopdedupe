@@ -24,6 +24,8 @@ pub fn supervised(db_name: process.Name(pog.Message)) {
 }
 
 pub fn handle_request(req: Request, ctx: types.Context) -> Response {
+  use <- wisp.log_request(req)
+
   case req.method, wisp.path_segments(req) {
     Post, ["api", "webhooks", "github"] -> webhook.handle(req, ctx)
     Get, ["api", "items"] -> list_items(ctx)

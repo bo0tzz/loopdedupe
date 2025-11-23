@@ -6,6 +6,7 @@ pub type Env {
   SecretKey
   Environment
   GithubWebhookSecret
+  VoyageApiKey
 }
 
 fn env_to_string(env: Env) -> String {
@@ -14,6 +15,7 @@ fn env_to_string(env: Env) -> String {
     DatabaseUrl -> "DATABASE_URL"
     Environment -> "ENVIRONMENT"
     GithubWebhookSecret -> "GITHUB_WEBHOOK_SECRET"
+    VoyageApiKey -> "VOYAGE_API_KEY"
   }
 }
 

@@ -1,3 +1,4 @@
+import jobs/setup
 import api/router
 import pog
 import gleam/otp/static_supervisor
@@ -16,6 +17,7 @@ pub fn main() {
 fn start_supervisor(db_name: process.Name(pog.Message)) {
   static_supervisor.new(static_supervisor.RestForOne)
   |> static_supervisor.add(connection.supervised(db_name))
+  |> static_supervisor.add(setup.supervised(db_name))
   |> static_supervisor.add(router.supervised(db_name))
   |> static_supervisor.start()
 }
