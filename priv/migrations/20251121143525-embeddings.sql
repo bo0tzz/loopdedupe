@@ -1,5 +1,5 @@
 --- migration:up
-CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS vchord CASCADE;
 
 CREATE TABLE item_embeddings
 (

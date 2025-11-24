@@ -103,10 +103,11 @@ fn expect_json_response(
   resp: response.Response(String),
   continue: fn(EmbedResponse) -> Result(a, snag.Snag),
 ) -> Result(a, snag.Snag) {
-  use <- bool.guard(
-    resp.status != 200,
-    snag.error("expected 200 but got " <> int.to_string(resp.status)),
-  )
+  use <- bool.lazy_guard(resp.status != 200, fn() {
+    let error = snag.new("expected 200 but got " <> int.to_string(resp.status))
+    echo snag.line_print(error)
+    Error(error)
+  })
   let content_type = response.get_header(resp, "content-type")
   case content_type {
     Ok("application/json") -> {

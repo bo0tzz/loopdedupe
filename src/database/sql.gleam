@@ -8,6 +8,42 @@ import gleam/dynamic/decode
 import gleam/option.{type Option}
 import pog
 
+/// Runs the `compute_edges` query
+/// defined in `./src/database/sql/compute_edges.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn compute_edges(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "WITH item_embedding AS (SELECT embedding
+                        FROM item_embeddings
+                        WHERE item_id = $1),
+     similar_items AS (SELECT e.item_id,
+                              1 - (e.embedding <=> (SELECT embedding FROM item_embedding)) as similarity
+                       FROM item_embeddings e
+                       WHERE e.item_id != $1
+                       ORDER BY e.embedding <=> (SELECT embedding FROM item_embedding)
+                       LIMIT 50)
+INSERT
+INTO item_similarity_edges
+    (source_item_id, target_item_id, similarity, edge_type)
+SELECT $1,
+       item_id,
+       similarity,
+       'computed'
+FROM similar_items
+WHERE similarity >= 0.7"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `list_items` query
 /// defined in `./src/database/sql/list_items.sql`.
 ///

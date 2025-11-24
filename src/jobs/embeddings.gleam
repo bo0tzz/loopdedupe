@@ -1,3 +1,4 @@
+import jobs/similarity
 import database/embeddings
 import database/item
 import embeddings/voyage
@@ -93,6 +94,8 @@ pub fn handle_embeddings_job(
     embeddings.insert_embedding(conn, item.github_id, embedding, model_name)
     |> result.map_error(fn(err) { string.inspect(err) |> map_string_to_error() }),
   )
+
+  let _ = similarity.enqueue(conn, embeddings_job.item_id)
   Ok(int.to_string(rows) <> " embedding rows inserted")
 }
 

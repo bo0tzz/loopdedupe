@@ -1,3 +1,4 @@
+import database/sql
 import gleam/float
 import gleam/list
 import gleam/string
@@ -24,4 +25,8 @@ pub fn insert_embedding(
   |> pog.parameter(pog.text(embedding_str))
   |> pog.parameter(pog.text(model))
   |> pog.execute(db)
+}
+
+pub fn compute_edges(db: pog.Connection, item_id: Int) {
+  sql.compute_edges(db, item_id)
 }
