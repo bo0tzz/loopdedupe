@@ -161,6 +161,81 @@ WHERE github_id = $1;"
   |> pog.execute(db)
 }
 
+/// A row you get from running the `suggest_duplicates` query
+/// defined in `./src/database/sql/suggest_duplicates.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type SuggestDuplicatesRow {
+  SuggestDuplicatesRow(
+    target_item_id: Int,
+    similarity: Float,
+    title: String,
+    state: GithubState,
+    state_reason: Option(GithubStateReason),
+  )
+}
+
+/// Runs the `suggest_duplicates` query
+/// defined in `./src/database/sql/suggest_duplicates.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn suggest_duplicates(
+  db: pog.Connection,
+  arg_1: Int,
+  arg_2: Float,
+) -> Result(pog.Returned(SuggestDuplicatesRow), pog.QueryError) {
+  let decoder = {
+    use target_item_id <- decode.field(0, decode.int)
+    use similarity <- decode.field(1, decode.float)
+    use title <- decode.field(2, decode.string)
+    use state <- decode.field(3, github_state_decoder())
+    use state_reason <- decode.field(
+      4,
+      decode.optional(github_state_reason_decoder()),
+    )
+    decode.success(SuggestDuplicatesRow(
+      target_item_id:,
+      similarity:,
+      title:,
+      state:,
+      state_reason:,
+    ))
+  }
+
+  "WITH all_edges AS (
+    SELECT target_item_id, similarity
+    FROM item_similarity_edges
+    WHERE source_item_id = $1
+      AND similarity >= $2
+
+    UNION
+
+    SELECT source_item_id, similarity
+    FROM item_similarity_edges
+    WHERE target_item_id = $1
+      AND similarity >= $2
+)
+SELECT
+    ae.target_item_id,
+    ae.similarity,
+    i.title,
+    i.state,
+    i.state_reason
+FROM all_edges ae
+         JOIN items i ON i.github_id = ae.target_item_id
+ORDER BY ae.similarity DESC
+LIMIT 10;"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.float(arg_2))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// Runs the `upsert_item` query
 /// defined in `./src/database/sql/upsert_item.sql`.
 ///

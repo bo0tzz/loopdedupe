@@ -75,6 +75,33 @@ pub fn select(
   |> map_item()
 }
 
+pub fn suggest_duplicates(db: pog.Connection, item_id: Int) {
+  case sql.suggest_duplicates(db, item_id, 0.7) {
+    Ok(pog.Returned(_, rows)) -> {
+      //TODO: Resolve canonical/root items in query
+      let items =
+        list.map(rows, fn(row) {
+          let sql.SuggestDuplicatesRow(
+            target_item_id:,
+            similarity:,
+            title:,
+            state:,
+            state_reason:,
+          ) = row
+          types.SuggestedDuplicate(
+            similarity:,
+            title:,
+            github_id: target_item_id,
+            state: sql_into_state(state),
+            state_reason: sql_into_state_reason(state_reason),
+          )
+        })
+      Ok(types.SuggestedDuplicates(items:))
+    }
+    Error(e) -> Error(e)
+  }
+}
+
 fn map_item(
   returned: Result(pog.Returned(sql.SelectItemRow), pog.QueryError),
 ) -> Result(types.Issue, snag.Snag) {

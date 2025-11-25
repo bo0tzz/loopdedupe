@@ -1,6 +1,6 @@
-import gleam/option
-import gleam/json
 import gleam/dynamic/decode
+import gleam/json
+import gleam/option
 
 pub type IssueState {
   Open
@@ -63,7 +63,8 @@ pub type Issue {
 }
 
 pub fn issue_to_json(issue: Issue) -> json.Json {
-  let Issue(github_id:, number:, title:, body:, state:, state_reason:, url:) = issue
+  let Issue(github_id:, number:, title:, body:, state:, state_reason:, url:) =
+    issue
   json.object([
     #("github_id", json.int(github_id)),
     #("number", json.int(number)),
@@ -82,7 +83,10 @@ fn issue_decoder() {
   use body <- decode.field("body", decode.string)
   use state <- decode.field("state", issue_state_decoder())
   // TODO: How to propagate Option() through database
-  use state_reason_opt <- decode.field("state_reason", decode.optional(issue_state_reason_decoder()))
+  use state_reason_opt <- decode.field(
+    "state_reason",
+    decode.optional(issue_state_reason_decoder()),
+  )
   let state_reason = option.unwrap(state_reason_opt, Completed)
   use url <- decode.field("url", decode.string)
 
@@ -106,4 +110,41 @@ pub fn issue_webhook_decoder() {
   use issue <- decode.field("issue", issue_decoder())
 
   decode.success(IssueWebhook(action:, issue:))
+}
+
+pub type SuggestedDuplicate {
+  SuggestedDuplicate(
+    similarity: Float,
+    github_id: Int,
+    title: String,
+    state: IssueState,
+    state_reason: IssueStateReason,
+  )
+}
+
+fn suggested_duplicate_to_json(
+  suggested_duplicate: SuggestedDuplicate,
+) -> json.Json {
+  let SuggestedDuplicate(similarity:, github_id:, title:, state:, state_reason:) =
+    suggested_duplicate
+  json.object([
+    #("similarity", json.float(similarity)),
+    #("github_id", json.int(github_id)),
+    #("title", json.string(title)),
+    #("state", issue_state_to_json(state)),
+    #("state_reason", issue_state_reason_to_json(state_reason)),
+  ])
+}
+
+pub type SuggestedDuplicates {
+  SuggestedDuplicates(items: List(SuggestedDuplicate))
+}
+
+pub fn suggested_duplicates_to_json(
+  suggested_duplicates: SuggestedDuplicates,
+) -> json.Json {
+  let SuggestedDuplicates(items:) = suggested_duplicates
+  json.object([
+    #("items", json.array(items, suggested_duplicate_to_json)),
+  ])
 }
