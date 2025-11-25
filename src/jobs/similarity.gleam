@@ -2,12 +2,13 @@ import database/embeddings
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
+import gleam/option
 import gleam/result
 import gleam/string
 import gleam/time/duration
+import logs
 import m25
 import pog
-import snag
 
 pub type SimilarityJob {
   SimilarityJob(item_id: Int)
@@ -58,7 +59,7 @@ pub fn queue_spec(conn: pog.Connection) {
     error_to_json: similarity_job_error_to_json,
     error_decoder: similarity_job_error_decoder(),
     handler_function: handle_similarity_job(conn, _),
-    default_job_timeout: duration.minutes(20),
+    default_job_timeout: duration.minutes(1),
     poll_interval: 5000,
     heartbeat_interval: 3000,
     allowed_heartbeat_misses: 3,
@@ -71,6 +72,7 @@ pub fn handle_similarity_job(
   conn: pog.Connection,
   similarity_job: SimilarityJob,
 ) -> Result(String, SimilarityJobError) {
+  use <- logs.log_errors()
   use pog.Returned(rows, _) <- result.try(
     embeddings.compute_edges(conn, similarity_job.item_id)
     |> result.map_error(fn(err) { string.inspect(err) |> map_string_to_error() }),
@@ -79,6 +81,8 @@ pub fn handle_similarity_job(
 }
 
 pub fn enqueue(conn: pog.Connection, item_id: Int) {
-  let job = m25.new_job(SimilarityJob(item_id:))
+  let job =
+    m25.new_job(SimilarityJob(item_id:))
+    |> m25.retry(3, option.Some(duration.seconds(30)))
   m25.enqueue(conn, queue_spec(conn), job)
 }

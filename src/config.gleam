@@ -1,11 +1,12 @@
-import gleam/string
 import envoy
+import gleam/string
 
 pub type Env {
   DatabaseUrl
   SecretKey
   Environment
   GithubWebhookSecret
+  GithubToken
   VoyageApiKey
 }
 
@@ -16,6 +17,7 @@ fn env_to_string(env: Env) -> String {
     Environment -> "ENVIRONMENT"
     GithubWebhookSecret -> "GITHUB_WEBHOOK_SECRET"
     VoyageApiKey -> "VOYAGE_API_KEY"
+    GithubToken -> "GITHUB_TOKEN"
   }
 }
 

@@ -1,18 +1,18 @@
 import cigogne
 import cigogne/config
 import config as env
-import gleam/erlang/process
 import gleam/option
 import gleam/otp/actor.{Started}
 import gleam/otp/supervision
 import gleam/result
 import pog
+import types.{type Context}
 
 pub fn supervised(
-  name: process.Name(pog.Message),
+  ctx: Context,
 ) -> supervision.ChildSpecification(pog.Connection) {
   let db_url = env.get_env(env.DatabaseUrl)
-  let assert Ok(cfg) = pog.url_config(name, db_url)
+  let assert Ok(cfg) = pog.url_config(ctx.db_name, db_url)
   let start = fn() {
     let res = pog.start(cfg)
 

@@ -1,22 +1,18 @@
-import api/types
+import api/items
 import api/webhook
 import config
-import database/item
-import github/types as github
-import gleam/erlang/process
 import gleam/http.{Get, Post}
-import gleam/json
+import gleam/option
+import jobs/backfill
 import mist
-import pog
+import types.{type Context}
 import wisp.{type Request, type Response}
 import wisp/wisp_mist
-import api/items
 
-pub fn supervised(db_name: process.Name(pog.Message)) {
+pub fn supervised(ctx: Context) {
   let secret = config.get_env(config.SecretKey)
-  let db = pog.named_connection(db_name)
-  let ctx = types.Context(db:)
-  let handler = fn(req) { handle_request(req, ctx) }
+
+  let handler = handle_request(_, ctx)
 
   wisp_mist.handler(handler, secret)
   |> mist.new
@@ -24,7 +20,7 @@ pub fn supervised(db_name: process.Name(pog.Message)) {
   |> mist.supervised
 }
 
-pub fn handle_request(req: Request, ctx: types.Context) -> Response {
+pub fn handle_request(req: Request, ctx: Context) -> Response {
   use <- wisp.log_request(req)
 
   case req.method, wisp.path_segments(req) {
@@ -32,6 +28,14 @@ pub fn handle_request(req: Request, ctx: types.Context) -> Response {
     Get, ["api", "items"] -> items.list(ctx)
     Get, ["api", "items", id] -> items.get(ctx, id)
     Get, ["api", "items", id, "similar"] -> items.get_similar(ctx, id)
+    Post, ["api", "backfill"] -> start_backfill(ctx)
     _, _ -> wisp.not_found()
+  }
+}
+
+fn start_backfill(ctx: Context) -> Response {
+  case backfill.enqueue(ctx, option.None) {
+    Ok(_) -> wisp.response(200) |> wisp.string_body("backfill started")
+    Error(_) -> wisp.internal_server_error()
   }
 }

@@ -1,5 +1,4 @@
 import api/middleware
-import api/types.{type Context}
 import database/item
 import github/types as github
 import gleam/http.{Post}
@@ -8,6 +7,7 @@ import gleam/result
 import gleam/string
 import jobs/embeddings
 import snag
+import types.{type Context}
 import wisp.{type Request, type Response}
 
 pub fn handle(req: Request, ctx: Context) -> Response {

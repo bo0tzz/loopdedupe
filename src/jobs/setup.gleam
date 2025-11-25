@@ -1,12 +1,14 @@
-import gleam/erlang/process
+import jobs/backfill
 import jobs/embeddings
+import jobs/similarity
 import m25
-import pog
+import types.{type Context}
 
-pub fn supervised(db_name: process.Name(pog.Message)) {
-  let conn = pog.named_connection(db_name)
-  let assert Ok(queues) = m25.new(conn)
-    |> m25.add_queue(embeddings.queue_spec(conn))
+pub fn supervised(ctx: Context) {
+  let queues = m25.new(ctx.db)
+  let assert Ok(queues) = m25.add_queue(queues, embeddings.queue_spec(ctx.db))
+  let assert Ok(queues) = m25.add_queue(queues, similarity.queue_spec(ctx.db))
+  let assert Ok(queues) = m25.add_queue(queues, backfill.queue_spec(ctx))
 
   m25.supervised(queues, 10_000)
 }

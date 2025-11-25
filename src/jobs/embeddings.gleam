@@ -1,13 +1,15 @@
-import jobs/similarity
 import database/embeddings
 import database/item
-import embeddings/voyage
+import embeddings/local
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
+import gleam/option
 import gleam/result
 import gleam/string
 import gleam/time/duration
+import jobs/similarity
+import logs
 import m25
 import pog
 import snag
@@ -65,7 +67,7 @@ pub fn queue_spec(conn: pog.Connection) {
     error_to_json: embeddings_job_error_to_json,
     error_decoder: embeddings_job_error_decoder(),
     handler_function: handle_embeddings_job(conn, _),
-    default_job_timeout: duration.minutes(20),
+    default_job_timeout: duration.minutes(1),
     poll_interval: 5000,
     heartbeat_interval: 3000,
     allowed_heartbeat_misses: 3,
@@ -78,6 +80,7 @@ pub fn handle_embeddings_job(
   conn: pog.Connection,
   embeddings_job: EmbeddingsJob,
 ) -> Result(String, EmbeddingsJobError) {
+  use <- logs.log_errors()
   use item <- result.try(
     item.select(conn, embeddings_job.item_id)
     |> result.map_error(fn(s) { EmbeddingsJobError(snag.line_print(s)) }),
@@ -85,10 +88,10 @@ pub fn handle_embeddings_job(
 
   let embed_text = "# " <> item.title <> "\n\n" <> item.body
   use #(embedding, model) <- result.try(
-    voyage.embed(embed_text) |> result.map_error(map_snag_to_error),
+    local.embed(embed_text) |> result.map_error(map_snag_to_error),
   )
 
-  let model_name = voyage.embed_model_to_string(model)
+  let model_name = local.embed_model_to_string(model)
 
   use pog.Returned(rows, _) <- result.try(
     embeddings.insert_embedding(conn, item.github_id, embedding, model_name)
@@ -100,6 +103,8 @@ pub fn handle_embeddings_job(
 }
 
 pub fn enqueue(conn: pog.Connection, item_id: Int) {
-  let job = m25.new_job(EmbeddingsJob(item_id:))
+  let job =
+    m25.new_job(EmbeddingsJob(item_id:))
+    |> m25.retry(3, option.Some(duration.seconds(30)))
   m25.enqueue(conn, queue_spec(conn), job)
 }

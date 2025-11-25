@@ -1,6 +1,7 @@
 import gleam/dynamic/decode
 import gleam/json
 import gleam/option
+import gleam/string
 
 pub type IssueState {
   Open
@@ -16,7 +17,7 @@ fn issue_state_to_json(issue_state: IssueState) -> json.Json {
 
 fn issue_state_decoder() {
   use string <- decode.then(decode.string)
-  case string {
+  case string |> string.lowercase() {
     "open" -> decode.success(Open)
     "closed" -> decode.success(Closed)
     _ -> decode.failure(Open, "IssueState")
@@ -41,7 +42,7 @@ fn issue_state_reason_to_json(issue_state_reason: IssueStateReason) -> json.Json
 
 fn issue_state_reason_decoder() -> decode.Decoder(IssueStateReason) {
   use variant <- decode.then(decode.string)
-  case variant {
+  case variant |> string.lowercase() {
     "completed" -> decode.success(Completed)
     "duplicate" -> decode.success(Duplicate)
     "not_planned" -> decode.success(NotPlanned)
@@ -76,17 +77,28 @@ pub fn issue_to_json(issue: Issue) -> json.Json {
   ])
 }
 
-fn issue_decoder() {
-  use github_id <- decode.field("id", decode.int)
+pub fn issue_decoder() {
+  let id_decoder =
+    decode.one_of(decode.at(["id"], decode.int), or: [
+      decode.at(["databaseId"], decode.int),
+    ])
+  use github_id <- decode.then(id_decoder)
   use number <- decode.field("number", decode.int)
   use title <- decode.field("title", decode.string)
   use body <- decode.field("body", decode.string)
   use state <- decode.field("state", issue_state_decoder())
   // TODO: How to propagate Option() through database
-  use state_reason_opt <- decode.field(
-    "state_reason",
-    decode.optional(issue_state_reason_decoder()),
-  )
+  let state_reason_decoder =
+    decode.one_of(
+      decode.at(["state_reason"], decode.optional(issue_state_reason_decoder())),
+      or: [
+        decode.at(
+          ["stateReason"],
+          decode.optional(issue_state_reason_decoder()),
+        ),
+      ],
+    )
+  use state_reason_opt <- decode.then(state_reason_decoder)
   let state_reason = option.unwrap(state_reason_opt, Completed)
   use url <- decode.field("url", decode.string)
 

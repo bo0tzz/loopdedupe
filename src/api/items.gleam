@@ -1,11 +1,11 @@
-import api/types
 import database/item
 import github/types as github
 import gleam/int
 import gleam/json
-import wisp.{type Request, type Response}
+import types.{type Context}
+import wisp.{type Response}
 
-pub fn list(ctx: types.Context) -> Response {
+pub fn list(ctx: Context) -> Response {
   case item.list(ctx.db) {
     Ok(list) -> {
       json.array(list, of: github.issue_to_json)
@@ -16,7 +16,7 @@ pub fn list(ctx: types.Context) -> Response {
   }
 }
 
-pub fn get(ctx: types.Context, id: String) -> Response {
+pub fn get(ctx: Context, id: String) -> Response {
   let assert Ok(item_id) = int.parse(id)
   case item.select(ctx.db, item_id) {
     Error(_) -> wisp.internal_server_error()
@@ -26,7 +26,7 @@ pub fn get(ctx: types.Context, id: String) -> Response {
   }
 }
 
-pub fn get_similar(ctx: types.Context, id: String) -> Response {
+pub fn get_similar(ctx: Context, id: String) -> Response {
   let assert Ok(item_id) = int.parse(id)
   case item.suggest_duplicates(ctx.db, item_id) {
     Ok(sugg) ->

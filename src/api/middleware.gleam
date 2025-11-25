@@ -27,7 +27,8 @@ pub fn require_github_signature(
 pub fn validate_signature(body: String, signature: String) -> Bool {
   case signature {
     "sha256=" <> provided_sig -> {
-      let secret = config.get_env(config.GithubWebhookSecret) |> bit_array.from_string()
+      let secret =
+        config.get_env(config.GithubWebhookSecret) |> bit_array.from_string()
       let computed =
         crypto.hmac(bit_array.from_string(body), crypto.Sha256, secret)
 

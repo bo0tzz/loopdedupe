@@ -304,7 +304,9 @@ fn github_state_encoder(github_state) -> pog.Value {
     Open -> "open"
   }
   |> pog.text
-}/// Corresponds to the Postgres `github_state_reason` enum.
+}
+
+/// Corresponds to the Postgres `github_state_reason` enum.
 ///
 /// > 🐿️ This type definition was generated automatically using v4.6.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -335,7 +337,9 @@ fn github_state_reason_encoder(github_state_reason) -> pog.Value {
     Completed -> "completed"
   }
   |> pog.text
-}/// Corresponds to the Postgres `item_type` enum.
+}
+
+/// Corresponds to the Postgres `item_type` enum.
 ///
 /// > 🐿️ This type definition was generated automatically using v4.6.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
