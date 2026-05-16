@@ -1,3 +1,4 @@
+import api/dashboard
 import api/items
 import api/webhook
 import config
@@ -29,6 +30,9 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
     Get, ["api", "items", id] -> items.get(ctx, id)
     Get, ["api", "items", id, "similar"] -> items.get_similar(ctx, id)
     Post, ["api", "backfill"] -> start_backfill(ctx)
+    Get, [] -> dashboard.index(ctx)
+    Get, ["dashboard", "stats"] -> dashboard.stats_fragment(ctx)
+    Get, ["items", id] -> dashboard.item_detail(ctx, id)
     _, _ -> wisp.not_found()
   }
 }

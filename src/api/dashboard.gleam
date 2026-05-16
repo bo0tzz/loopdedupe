@@ -1,0 +1,322 @@
+import database/item
+import database/sql
+import github/types as github
+import gleam/float
+import gleam/int
+import gleam/list
+import gleam/option.{type Option}
+import gleam/string
+import gleam/time/duration
+import gleam/time/timestamp.{type Timestamp}
+import pog
+import types.{type Context}
+import wisp.{type Response}
+
+const top_pairs_limit = 50
+
+const recent_items_limit = 50
+
+pub fn index(ctx: Context) -> Response {
+  let pairs = case sql.dashboard_top_pairs(ctx.db, top_pairs_limit) {
+    Ok(pog.Returned(_, rows)) -> rows
+    Error(_) -> []
+  }
+  let recent = case sql.dashboard_recent_items(ctx.db, recent_items_limit) {
+    Ok(pog.Returned(_, rows)) -> rows
+    Error(_) -> []
+  }
+  let stats = case sql.dashboard_stats(ctx.db) {
+    Ok(pog.Returned(_, [row])) -> option.Some(row)
+    _ -> option.None
+  }
+
+  let body =
+    page("loopdedupe", [
+      stats_block(stats),
+      "<div class=\"columns\"><section><h2>Top candidate pairs</h2>",
+      pairs_table(pairs),
+      "</section><section><h2>Recent items</h2>",
+      recent_table(recent),
+      "</section></div>",
+    ])
+
+  wisp.html_response(body, 200)
+}
+
+pub fn stats_fragment(ctx: Context) -> Response {
+  let stats = case sql.dashboard_stats(ctx.db) {
+    Ok(pog.Returned(_, [row])) -> option.Some(row)
+    _ -> option.None
+  }
+  wisp.html_response(stats_block(stats), 200)
+}
+
+pub fn item_detail(ctx: Context, id: String) -> Response {
+  case int.parse(id) {
+    Error(_) -> wisp.bad_request("invalid id")
+    Ok(item_id) -> {
+      case item.select(ctx.db, item_id) {
+        Error(_) -> wisp.not_found()
+        Ok(it) -> {
+          let candidates = case item.suggest_duplicates(ctx.db, item_id) {
+            Ok(github.SuggestedDuplicates(items)) -> items
+            Error(_) -> []
+          }
+          let body =
+            page("#" <> int.to_string(it.number) <> " · " <> it.title, [
+              item_header(it),
+              "<h2>Similar candidates</h2>",
+              candidates_table(candidates),
+            ])
+          wisp.html_response(body, 200)
+        }
+      }
+    }
+  }
+}
+
+// --- HTML helpers ------------------------------------------------------------
+
+fn page(title: String, sections: List(String)) -> String {
+  "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>"
+  <> escape(title)
+  <> "</title>"
+  <> style_block()
+  <> "<script src=\"https://unpkg.com/htmx.org@1.9.10\"></script>"
+  <> "</head><body><header><a href=\"/\"><strong>loopdedupe</strong></a></header><main>"
+  <> string.concat(sections)
+  <> "</main></body></html>"
+}
+
+fn style_block() -> String {
+  "<style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 1400px; margin: 0 auto; padding: 1em; line-height: 1.4; }
+    header { padding: 0.5em 0; margin-bottom: 1em; border-bottom: 1px solid #ddd; }
+    header a { color: inherit; text-decoration: none; }
+    h2 { margin-top: 0; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1em; padding: 1em; background: #f6f6f6; border-radius: 6px; margin-bottom: 1.5em; }
+    @media (prefers-color-scheme: dark) { .stats { background: #222; } }
+    .stat-label { font-size: 0.8em; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-value { font-size: 1.4em; font-weight: 600; }
+    .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 2em; }
+    @media (max-width: 900px) { .columns { grid-template-columns: 1fr; } }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+    th, td { text-align: left; padding: 0.4em 0.5em; border-bottom: 1px solid #eee; vertical-align: top; }
+    @media (prefers-color-scheme: dark) { th, td { border-color: #333; } }
+    th { font-weight: 600; opacity: 0.7; font-size: 0.85em; }
+    .pair { display: block; }
+    .pair + .pair { margin-top: 0.25em; opacity: 0.85; }
+    .similarity { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .kind { display: inline-block; font-size: 0.7em; padding: 0.1em 0.4em; border-radius: 3px; background: #ddd; color: #333; vertical-align: middle; margin-right: 0.3em; }
+    .kind-discussion { background: #c8e6c9; }
+    .state-closed { opacity: 0.55; }
+    .state-duplicate { text-decoration: line-through; opacity: 0.55; }
+    .item-body { white-space: pre-wrap; background: #f6f6f6; padding: 1em; border-radius: 6px; }
+    @media (prefers-color-scheme: dark) { .item-body, .kind { background: #222; color: #eee; } .kind-discussion { background: #2e5b35; } }
+    a { color: #06c; }
+  </style>"
+}
+
+fn stats_block(stats: Option(sql.DashboardStatsRow)) -> String {
+  let cells = case stats {
+    option.None -> [#("status", "unavailable")]
+    option.Some(s) -> [
+      #("items", int.to_string(s.items_total)),
+      #(
+        "issues / discussions",
+        int.to_string(s.items_issues)
+          <> " / "
+          <> int.to_string(s.items_discussions),
+      ),
+      #("embeddings", int.to_string(s.embeddings_total)),
+      #("similarity edges", int.to_string(s.edges_total)),
+      #("confirmed duplicates", int.to_string(s.duplicates_total)),
+      #("backfill pending", int.to_string(s.jobs_backfill_pending)),
+      #("embeddings pending", int.to_string(s.jobs_embeddings_pending)),
+      #("similarity pending", int.to_string(s.jobs_similarity_pending)),
+      #("jobs failed", int.to_string(s.jobs_failed)),
+    ]
+  }
+  let body =
+    list.map(cells, fn(c) {
+      let #(label, value) = c
+      "<div><div class=\"stat-label\">"
+      <> escape(label)
+      <> "</div><div class=\"stat-value\">"
+      <> escape(value)
+      <> "</div></div>"
+    })
+    |> string.concat()
+  "<div id=\"stats\" class=\"stats\" hx-get=\"/dashboard/stats\" hx-trigger=\"every 5s\" hx-swap=\"outerHTML\">"
+  <> body
+  <> "</div>"
+}
+
+fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
+  case rows {
+    [] -> "<p><em>No pairs yet. Run backfill to populate.</em></p>"
+    _ ->
+      "<table><thead><tr><th>Sim</th><th>Pair</th></tr></thead><tbody>"
+      <> {
+        list.map(rows, fn(row) {
+          "<tr><td class=\"similarity\">"
+          <> format_similarity(row.similarity)
+          <> "</td><td>"
+          <> pair_side(
+            row.source_item_id,
+            row.source_number,
+            row.source_title,
+            row.source_item_type,
+            row.source_state,
+            row.source_state_reason,
+          )
+          <> pair_side(
+            row.target_item_id,
+            row.target_number,
+            row.target_title,
+            row.target_item_type,
+            row.target_state,
+            row.target_state_reason,
+          )
+          <> "</td></tr>"
+        })
+        |> string.concat()
+      }
+      <> "</tbody></table>"
+  }
+}
+
+fn pair_side(
+  github_id: Int,
+  number: Int,
+  title: String,
+  item_type: sql.ItemType,
+  state: sql.ItemState,
+  state_reason: Option(sql.ItemStateReason),
+) -> String {
+  "<a class=\"pair "
+  <> state_class(state, state_reason)
+  <> "\" href=\"/items/"
+  <> int.to_string(github_id)
+  <> "\">"
+  <> kind_badge(item_type)
+  <> "#"
+  <> int.to_string(number)
+  <> " "
+  <> escape(title)
+  <> "</a>"
+}
+
+fn recent_table(rows: List(sql.DashboardRecentItemsRow)) -> String {
+  case rows {
+    [] -> "<p><em>No items yet.</em></p>"
+    _ ->
+      "<table><thead><tr><th>Created</th><th>Item</th></tr></thead><tbody>"
+      <> {
+        list.map(rows, fn(row) {
+          "<tr><td>"
+          <> escape(format_date(row.github_created_at))
+          <> "</td><td><a class=\""
+          <> state_class(row.state, row.state_reason)
+          <> "\" href=\"/items/"
+          <> int.to_string(row.github_id)
+          <> "\">"
+          <> kind_badge(row.item_type)
+          <> "#"
+          <> int.to_string(row.number)
+          <> " "
+          <> escape(row.title)
+          <> "</a></td></tr>"
+        })
+        |> string.concat()
+      }
+      <> "</tbody></table>"
+  }
+}
+
+fn item_header(it: github.Issue) -> String {
+  "<p><a href=\""
+  <> escape(it.url)
+  <> "\" target=\"_blank\" rel=\"noreferrer\">View on GitHub →</a> · "
+  <> escape(format_date(it.created_at))
+  <> "</p><h2>#"
+  <> int.to_string(it.number)
+  <> " "
+  <> escape(it.title)
+  <> "</h2><div class=\"item-body\">"
+  <> escape(it.body)
+  <> "</div>"
+}
+
+fn candidates_table(items: List(github.SuggestedDuplicate)) -> String {
+  case items {
+    [] -> "<p><em>No candidates above threshold.</em></p>"
+    _ ->
+      "<table><thead><tr><th>Sim</th><th>Candidate</th></tr></thead><tbody>"
+      <> {
+        list.map(items, fn(c) {
+          "<tr><td class=\"similarity\">"
+          <> format_similarity(c.similarity)
+          <> "</td><td><a class=\""
+          <> state_class_github(c.state, c.state_reason)
+          <> "\" href=\"/items/"
+          <> int.to_string(c.github_id)
+          <> "\">"
+          <> escape(c.title)
+          <> "</a></td></tr>"
+        })
+        |> string.concat()
+      }
+      <> "</tbody></table>"
+  }
+}
+
+fn kind_badge(t: sql.ItemType) -> String {
+  case t {
+    sql.Issue -> "<span class=\"kind\">issue</span>"
+    sql.Discussion -> "<span class=\"kind kind-discussion\">discussion</span>"
+  }
+}
+
+fn state_class(
+  state: sql.ItemState,
+  reason: Option(sql.ItemStateReason),
+) -> String {
+  case state, reason {
+    sql.Closed, option.Some(sql.Duplicate) -> "state-duplicate"
+    sql.Closed, _ -> "state-closed"
+    _, _ -> ""
+  }
+}
+
+fn state_class_github(
+  state: github.ItemState,
+  reason: Option(github.ItemStateReason),
+) -> String {
+  case state, reason {
+    github.Closed, option.Some(github.Duplicate) -> "state-duplicate"
+    github.Closed, _ -> "state-closed"
+    _, _ -> ""
+  }
+}
+
+fn format_similarity(s: Float) -> String {
+  case float.to_precision(s *. 100.0, 1) |> float.to_string() {
+    str -> str <> "%"
+  }
+}
+
+fn format_date(t: Timestamp) -> String {
+  // YYYY-MM-DD slice of RFC3339 — good enough for a sortable, scannable list.
+  timestamp.to_rfc3339(t, duration.seconds(0)) |> string.slice(0, 10)
+}
+
+fn escape(s: String) -> String {
+  s
+  |> string.replace("&", "&amp;")
+  |> string.replace("<", "&lt;")
+  |> string.replace(">", "&gt;")
+  |> string.replace("\"", "&quot;")
+  |> string.replace("'", "&#39;")
+}

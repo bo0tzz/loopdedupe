@@ -1,0 +1,10 @@
+SELECT (SELECT COUNT(*) FROM items)                                           AS items_total,
+       (SELECT COUNT(*) FROM items WHERE item_type = 'issue')                 AS items_issues,
+       (SELECT COUNT(*) FROM items WHERE item_type = 'discussion')            AS items_discussions,
+       (SELECT COUNT(*) FROM item_embeddings)                                 AS embeddings_total,
+       (SELECT COUNT(*) FROM item_similarity_edges)                           AS edges_total,
+       (SELECT COUNT(*) FROM item_duplicates)                                 AS duplicates_total,
+       (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'backfill'    AND status = 'pending')   AS jobs_backfill_pending,
+       (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'embeddings'  AND status = 'pending')   AS jobs_embeddings_pending,
+       (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'similarity'  AND status = 'pending')   AS jobs_similarity_pending,
+       (SELECT COUNT(*) FROM m25.job WHERE status = 'failed')                                   AS jobs_failed;
