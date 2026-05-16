@@ -18,5 +18,15 @@ WHERE NOT EXISTS (SELECT 1
                   FROM item_duplicates d
                   WHERE (d.source_item_id = e.source_item_id AND d.target_item_id = e.target_item_id)
                      OR (d.source_item_id = e.target_item_id AND d.target_item_id = e.source_item_id))
+  -- At least one side must be actionable (open); pairs of two already-closed
+  -- items are dead weight in the review feed.
+  AND (src.state = 'open' OR tgt.state = 'open')
+  -- Items closed as duplicate are dupes of something else. Long-term these
+  -- should be resolved through item_duplicates to their canonical and the
+  -- canonical proposed instead — left as a TODO once duplicateOf capture
+  -- and chain resolution land. For now we just hide them to keep the
+  -- candidates feed signal-heavy.
+  AND src.state_reason IS DISTINCT FROM 'duplicate'
+  AND tgt.state_reason IS DISTINCT FROM 'duplicate'
 ORDER BY e.similarity DESC
 LIMIT $1;

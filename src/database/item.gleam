@@ -93,6 +93,21 @@ pub fn list(db: pog.Connection) -> Result(List(types.Issue), pog.QueryError) {
   sql.list_items(db) |> result.map(map_items)
 }
 
+// Backfill knows the full duplicate state of an item from the GitHub
+// timeline. Some => point at canonical; None => the issue is not marked as
+// a duplicate of anything (clear whatever was there). Webhook doesn't call
+// this — it lacks the timeline data, so it preserves whatever's stored.
+pub fn apply_duplicate_of(
+  db: pog.Connection,
+  github_id: Int,
+  target: option.Option(Int),
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  case target {
+    option.Some(t) -> sql.set_duplicate_of(db, github_id, t)
+    option.None -> sql.clear_duplicate_of(db, github_id)
+  }
+}
+
 pub fn select(
   db: pog.Connection,
   item_id: Int,

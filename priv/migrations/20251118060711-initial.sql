@@ -29,8 +29,19 @@ CREATE TABLE items
     -- handle timestamptz, and GitHub already gives us UTC, so we drop the
     -- tz tag rather than fight the codegen.
     github_created_at  TIMESTAMP NOT NULL,
-    github_updated_at  TIMESTAMP NOT NULL
+    github_updated_at  TIMESTAMP NOT NULL,
+    -- Per-repo number of the canonical item this one was marked as duplicate
+    -- of. The signal is a maintainer comment of the form '#NNN' on the closed
+    -- issue — GitHub's MarkedAsDuplicateEvent is rarely used in the immich
+    -- workflow. Stored as number (not github_id) because that's all the
+    -- comment gives us; resolution to github_id happens at query time via
+    -- JOIN against items.number. No FK; dangling refs (typos, PRs,
+    -- not-yet-ingested canonicals) drop out of the join naturally.
+    duplicate_of_number INTEGER
 );
+
+CREATE INDEX ON items (duplicate_of_number) WHERE duplicate_of_number IS NOT NULL;
+CREATE INDEX ON items (number);
 
 CREATE INDEX ON items (github_created_at DESC);
 

@@ -89,13 +89,20 @@ pub fn handle_backfill_job(
   let _ =
     pog.transaction(ctx.db, fn(conn) {
       use _ <- result.try(
-        list.map(items.items, item.upsert(conn, _))
+        list.map(items.items, fn(bi) { item.upsert(conn, bi.issue) })
         |> result.all()
         |> result.map_error(map_error),
       )
       use _ <- result.try(
-        list.map(items.items, fn(item) {
-          embeddings.enqueue(conn, item.github_id)
+        list.map(items.items, fn(bi) {
+          item.apply_duplicate_of(conn, bi.issue.github_id, bi.duplicate_of_number)
+        })
+        |> result.all()
+        |> result.map_error(map_error),
+      )
+      use _ <- result.try(
+        list.map(items.items, fn(bi) {
+          embeddings.enqueue(conn, bi.issue.github_id)
         })
         |> result.all()
         |> result.map_error(map_error),

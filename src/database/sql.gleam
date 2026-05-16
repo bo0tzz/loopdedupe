@@ -9,6 +9,28 @@ import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 import pog
 
+/// Runs the `clear_duplicate_of` query
+/// defined in `./src/database/sql/clear_duplicate_of.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn clear_duplicate_of(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "UPDATE items
+SET duplicate_of_number = NULL
+WHERE github_id = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// Runs the `compute_edges` query
 /// defined in `./src/database/sql/compute_edges.sql`.
 ///
@@ -278,6 +300,16 @@ WHERE NOT EXISTS (SELECT 1
                   FROM item_duplicates d
                   WHERE (d.source_item_id = e.source_item_id AND d.target_item_id = e.target_item_id)
                      OR (d.source_item_id = e.target_item_id AND d.target_item_id = e.source_item_id))
+  -- At least one side must be actionable (open); pairs of two already-closed
+  -- items are dead weight in the review feed.
+  AND (src.state = 'open' OR tgt.state = 'open')
+  -- Items closed as duplicate are dupes of something else. Long-term these
+  -- should be resolved through item_duplicates to their canonical and the
+  -- canonical proposed instead — left as a TODO once duplicateOf capture
+  -- and chain resolution land. For now we just hide them to keep the
+  -- candidates feed signal-heavy.
+  AND src.state_reason IS DISTINCT FROM 'duplicate'
+  AND tgt.state_reason IS DISTINCT FROM 'duplicate'
 ORDER BY e.similarity DESC
 LIMIT $1;
 "
@@ -305,6 +337,7 @@ pub type ListItemsRow {
     url: String,
     github_created_at: Timestamp,
     github_updated_at: Timestamp,
+    duplicate_of_number: Option(Int),
   )
 }
 
@@ -331,6 +364,7 @@ pub fn list_items(
     use url <- decode.field(7, decode.string)
     use github_created_at <- decode.field(8, pog.timestamp_decoder())
     use github_updated_at <- decode.field(9, pog.timestamp_decoder())
+    use duplicate_of_number <- decode.field(10, decode.optional(decode.int))
     decode.success(ListItemsRow(
       github_id:,
       number:,
@@ -342,6 +376,7 @@ pub fn list_items(
       url:,
       github_created_at:,
       github_updated_at:,
+      duplicate_of_number:,
     ))
   }
 
@@ -413,6 +448,30 @@ WHERE github_id = $1;
 "
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Runs the `set_duplicate_of` query
+/// defined in `./src/database/sql/set_duplicate_of.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn set_duplicate_of(
+  db: pog.Connection,
+  arg_1: Int,
+  arg_2: Int,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "UPDATE items
+SET duplicate_of_number = $2
+WHERE github_id = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.int(arg_2))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
