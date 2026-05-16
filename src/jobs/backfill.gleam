@@ -86,6 +86,11 @@ pub fn handle_backfill_job(
     graphql.list_items(ctx.github_client, backfill_job.cursor)
     |> result.map_error(map_string_to_error),
   )
+  // Persist the issue rows and their duplicate-of pointers atomically. Job
+  // enqueues happen AFTER the commit so a unique_key collision (which is the
+  // expected path for items we've already enqueued) can't poison this
+  // transaction with a 25P02 "in_failed_sql_transaction" — once a single
+  // statement errors inside a transaction, every subsequent one is rejected.
   use _ <- result.try(
     pog.transaction(ctx.db, fn(conn) {
       use _ <- result.try(
@@ -93,34 +98,36 @@ pub fn handle_backfill_job(
         |> result.all()
         |> result.map_error(map_error),
       )
-      use _ <- result.try(
-        list.map(items.items, fn(bi) {
-          item.apply_duplicate_of(conn, bi.issue.github_id, bi.duplicate_of_number)
-        })
-        |> result.all()
-        |> result.map_error(map_error),
-      )
-      use _ <- result.try(
-        list.map(items.items, fn(bi) {
-          embeddings.enqueue(conn, bi.issue.github_id)
-        })
-        |> result.all()
-        |> result.map_error(map_error),
-      )
-
-      case items.page_info.cursor {
-        option.Some("") -> Ok(Nil)
-        option.Some(cursor) ->
-          enqueue_with_conn(conn, ctx, option.Some(cursor))
-          |> result.replace(Nil)
-          |> result.map_error(map_error)
-        option.None -> Ok(Nil)
-      }
+      list.map(items.items, fn(bi) {
+        item.apply_duplicate_of(conn, bi.issue.github_id, bi.duplicate_of_number)
+      })
+      |> result.all()
+      |> result.map_error(map_error)
     })
     |> result.map_error(map_error),
   )
 
-  Ok("backfilled")
+  // Best-effort enqueues outside the transaction. embeddings.enqueue already
+  // swallows ConstraintViolated, so this collects only the real errors.
+  use _ <- result.try(
+    list.map(items.items, fn(bi) {
+      embeddings.enqueue(ctx.db, bi.issue.github_id)
+    })
+    |> result.all()
+    |> result.map_error(map_error),
+  )
+
+  case items.page_info.cursor {
+    option.Some("") -> Ok("backfilled")
+    option.None -> Ok("backfilled")
+    option.Some(cursor) -> {
+      use _ <- result.try(
+        enqueue(ctx, option.Some(cursor))
+        |> result.map_error(map_error),
+      )
+      Ok("backfilled")
+    }
+  }
 }
 
 pub fn enqueue(ctx: Context, cursor: option.Option(String)) {

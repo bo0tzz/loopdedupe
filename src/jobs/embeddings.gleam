@@ -106,5 +106,19 @@ pub fn enqueue(conn: pog.Connection, item_id: Int) {
   let job =
     m25.new_job(EmbeddingsJob(item_id:))
     |> m25.retry(3, option.Some(duration.seconds(30)))
-  m25.enqueue(conn, queue_spec(conn), job)
+    // Dedupe per item — the unique index on m25.job covers all non-failed,
+    // non-cancelled statuses, so this no-ops while a job is pending/running
+    // or has already succeeded, but still allows retries after a real
+    // failure since failed rows are excluded from the index.
+    |> m25.unique_key("embeddings:" <> int.to_string(item_id))
+  case m25.enqueue(conn, queue_spec(conn), job) {
+    Ok(_) -> Ok(Nil)
+    // unique_key collision: a non-finished or already-succeeded job exists
+    // for this item. That's exactly the desired outcome — no extra work
+    // gets enqueued, and we don't want to roll back the surrounding
+    // transaction over a successful no-op.
+    Error(m25.JobRecordFetchQueryError(pog.ConstraintViolated(_, _, _))) ->
+      Ok(Nil)
+    Error(e) -> Error(e)
+  }
 }
