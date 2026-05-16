@@ -45,6 +45,248 @@ WHERE similarity >= 0.7"
   |> pog.execute(db)
 }
 
+/// A row you get from running the `dashboard_recent_items` query
+/// defined in `./src/database/sql/dashboard_recent_items.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type DashboardRecentItemsRow {
+  DashboardRecentItemsRow(
+    github_id: Int,
+    number: Int,
+    item_type: ItemType,
+    title: String,
+    state: ItemState,
+    state_reason: Option(ItemStateReason),
+    url: String,
+    github_created_at: Timestamp,
+  )
+}
+
+/// Runs the `dashboard_recent_items` query
+/// defined in `./src/database/sql/dashboard_recent_items.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn dashboard_recent_items(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(DashboardRecentItemsRow), pog.QueryError) {
+  let decoder = {
+    use github_id <- decode.field(0, decode.int)
+    use number <- decode.field(1, decode.int)
+    use item_type <- decode.field(2, item_type_decoder())
+    use title <- decode.field(3, decode.string)
+    use state <- decode.field(4, item_state_decoder())
+    use state_reason <- decode.field(
+      5,
+      decode.optional(item_state_reason_decoder()),
+    )
+    use url <- decode.field(6, decode.string)
+    use github_created_at <- decode.field(7, pog.timestamp_decoder())
+    decode.success(DashboardRecentItemsRow(
+      github_id:,
+      number:,
+      item_type:,
+      title:,
+      state:,
+      state_reason:,
+      url:,
+      github_created_at:,
+    ))
+  }
+
+  "SELECT github_id,
+       number,
+       item_type,
+       title,
+       state,
+       state_reason,
+       url,
+       github_created_at
+FROM items
+ORDER BY github_created_at DESC
+LIMIT $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// A row you get from running the `dashboard_stats` query
+/// defined in `./src/database/sql/dashboard_stats.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type DashboardStatsRow {
+  DashboardStatsRow(
+    items_total: Int,
+    items_issues: Int,
+    items_discussions: Int,
+    embeddings_total: Int,
+    edges_total: Int,
+    duplicates_total: Int,
+    jobs_backfill_pending: Int,
+    jobs_embeddings_pending: Int,
+    jobs_similarity_pending: Int,
+    jobs_failed: Int,
+  )
+}
+
+/// Runs the `dashboard_stats` query
+/// defined in `./src/database/sql/dashboard_stats.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn dashboard_stats(
+  db: pog.Connection,
+) -> Result(pog.Returned(DashboardStatsRow), pog.QueryError) {
+  let decoder = {
+    use items_total <- decode.field(0, decode.int)
+    use items_issues <- decode.field(1, decode.int)
+    use items_discussions <- decode.field(2, decode.int)
+    use embeddings_total <- decode.field(3, decode.int)
+    use edges_total <- decode.field(4, decode.int)
+    use duplicates_total <- decode.field(5, decode.int)
+    use jobs_backfill_pending <- decode.field(6, decode.int)
+    use jobs_embeddings_pending <- decode.field(7, decode.int)
+    use jobs_similarity_pending <- decode.field(8, decode.int)
+    use jobs_failed <- decode.field(9, decode.int)
+    decode.success(DashboardStatsRow(
+      items_total:,
+      items_issues:,
+      items_discussions:,
+      embeddings_total:,
+      edges_total:,
+      duplicates_total:,
+      jobs_backfill_pending:,
+      jobs_embeddings_pending:,
+      jobs_similarity_pending:,
+      jobs_failed:,
+    ))
+  }
+
+  "SELECT (SELECT COUNT(*) FROM items)                                           AS items_total,
+       (SELECT COUNT(*) FROM items WHERE item_type = 'issue')                 AS items_issues,
+       (SELECT COUNT(*) FROM items WHERE item_type = 'discussion')            AS items_discussions,
+       (SELECT COUNT(*) FROM item_embeddings)                                 AS embeddings_total,
+       (SELECT COUNT(*) FROM item_similarity_edges)                           AS edges_total,
+       (SELECT COUNT(*) FROM item_duplicates)                                 AS duplicates_total,
+       (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'backfill'    AND status = 'pending')   AS jobs_backfill_pending,
+       (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'embeddings'  AND status = 'pending')   AS jobs_embeddings_pending,
+       (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'similarity'  AND status = 'pending')   AS jobs_similarity_pending,
+       (SELECT COUNT(*) FROM m25.job WHERE status = 'failed')                                   AS jobs_failed;
+"
+  |> pog.query
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// A row you get from running the `dashboard_top_pairs` query
+/// defined in `./src/database/sql/dashboard_top_pairs.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type DashboardTopPairsRow {
+  DashboardTopPairsRow(
+    source_item_id: Int,
+    target_item_id: Int,
+    similarity: Float,
+    source_number: Int,
+    source_title: String,
+    source_item_type: ItemType,
+    source_state: ItemState,
+    source_state_reason: Option(ItemStateReason),
+    target_number: Int,
+    target_title: String,
+    target_item_type: ItemType,
+    target_state: ItemState,
+    target_state_reason: Option(ItemStateReason),
+  )
+}
+
+/// Runs the `dashboard_top_pairs` query
+/// defined in `./src/database/sql/dashboard_top_pairs.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn dashboard_top_pairs(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(DashboardTopPairsRow), pog.QueryError) {
+  let decoder = {
+    use source_item_id <- decode.field(0, decode.int)
+    use target_item_id <- decode.field(1, decode.int)
+    use similarity <- decode.field(2, decode.float)
+    use source_number <- decode.field(3, decode.int)
+    use source_title <- decode.field(4, decode.string)
+    use source_item_type <- decode.field(5, item_type_decoder())
+    use source_state <- decode.field(6, item_state_decoder())
+    use source_state_reason <- decode.field(
+      7,
+      decode.optional(item_state_reason_decoder()),
+    )
+    use target_number <- decode.field(8, decode.int)
+    use target_title <- decode.field(9, decode.string)
+    use target_item_type <- decode.field(10, item_type_decoder())
+    use target_state <- decode.field(11, item_state_decoder())
+    use target_state_reason <- decode.field(
+      12,
+      decode.optional(item_state_reason_decoder()),
+    )
+    decode.success(DashboardTopPairsRow(
+      source_item_id:,
+      target_item_id:,
+      similarity:,
+      source_number:,
+      source_title:,
+      source_item_type:,
+      source_state:,
+      source_state_reason:,
+      target_number:,
+      target_title:,
+      target_item_type:,
+      target_state:,
+      target_state_reason:,
+    ))
+  }
+
+  "SELECT e.source_item_id,
+       e.target_item_id,
+       e.similarity,
+       src.number       AS source_number,
+       src.title        AS source_title,
+       src.item_type    AS source_item_type,
+       src.state        AS source_state,
+       src.state_reason AS source_state_reason,
+       tgt.number       AS target_number,
+       tgt.title        AS target_title,
+       tgt.item_type    AS target_item_type,
+       tgt.state        AS target_state,
+       tgt.state_reason AS target_state_reason
+FROM item_similarity_edges e
+         JOIN items src ON src.github_id = e.source_item_id
+         JOIN items tgt ON tgt.github_id = e.target_item_id
+WHERE NOT EXISTS (SELECT 1
+                  FROM item_duplicates d
+                  WHERE (d.source_item_id = e.source_item_id AND d.target_item_id = e.target_item_id)
+                     OR (d.source_item_id = e.target_item_id AND d.target_item_id = e.source_item_id))
+ORDER BY e.similarity DESC
+LIMIT $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `list_items` query
 /// defined in `./src/database/sql/list_items.sql`.
 ///
@@ -167,7 +409,8 @@ pub fn select_item(
 
   "SELECT github_id, number, title, body, state, state_reason, url, github_created_at, github_updated_at
 FROM items
-WHERE github_id = $1;"
+WHERE github_id = $1;
+"
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
   |> pog.returning(decoder)
@@ -263,7 +506,7 @@ pub fn upsert_item(
   arg_4: String,
   arg_5: String,
   arg_6: ItemState,
-  arg_7: Option(ItemStateReason),
+  arg_7: ItemStateReason,
   arg_8: String,
   arg_9: Timestamp,
   arg_10: Timestamp,
@@ -279,7 +522,8 @@ ON CONFLICT (github_id) DO UPDATE
         state             = EXCLUDED.state,
         state_reason      = EXCLUDED.state_reason,
         url               = EXCLUDED.url,
-        github_updated_at = EXCLUDED.github_updated_at;"
+        github_updated_at = EXCLUDED.github_updated_at;
+"
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
   |> pog.parameter(pog.int(arg_2))
@@ -287,13 +531,55 @@ ON CONFLICT (github_id) DO UPDATE
   |> pog.parameter(pog.text(arg_4))
   |> pog.parameter(pog.text(arg_5))
   |> pog.parameter(item_state_encoder(arg_6))
-  |> pog.parameter(case arg_7 {
-    option.Some(value) -> item_state_reason_encoder(value)
-    option.None -> pog.null()
-  })
+  |> pog.parameter(item_state_reason_encoder(arg_7))
   |> pog.parameter(pog.text(arg_8))
   |> pog.parameter(pog.timestamp(arg_9))
   |> pog.parameter(pog.timestamp(arg_10))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Runs the `upsert_item_without_reason` query
+/// defined in `./src/database/sql/upsert_item_without_reason.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn upsert_item_without_reason(
+  db: pog.Connection,
+  arg_1: Int,
+  arg_2: Int,
+  arg_3: ItemType,
+  arg_4: String,
+  arg_5: String,
+  arg_6: ItemState,
+  arg_7: String,
+  arg_8: Timestamp,
+  arg_9: Timestamp,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "INSERT INTO items (github_id, number, item_type, title, body, state, url, github_created_at, github_updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (github_id) DO UPDATE
+    SET number            = EXCLUDED.number,
+        title             = EXCLUDED.title,
+        body              = EXCLUDED.body,
+        state             = EXCLUDED.state,
+        state_reason      = NULL,
+        url               = EXCLUDED.url,
+        github_updated_at = EXCLUDED.github_updated_at;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.int(arg_2))
+  |> pog.parameter(item_type_encoder(arg_3))
+  |> pog.parameter(pog.text(arg_4))
+  |> pog.parameter(pog.text(arg_5))
+  |> pog.parameter(item_state_encoder(arg_6))
+  |> pog.parameter(pog.text(arg_7))
+  |> pog.parameter(pog.timestamp(arg_8))
+  |> pog.parameter(pog.timestamp(arg_9))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -325,43 +611,41 @@ fn item_state_encoder(item_state) -> pog.Value {
     Open -> "open"
   }
   |> pog.text
-}
-
-/// Corresponds to the Postgres `item_state_reason` enum.
+}/// Corresponds to the Postgres `item_state_reason` enum.
 ///
 /// > 🐿️ This type definition was generated automatically using v4.6.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type ItemStateReason {
+  Resolved
+  Outdated
   Duplicate
   NotPlanned
   Reopened
   Completed
-  Outdated
-  Resolved
 }
 
 fn item_state_reason_decoder() -> decode.Decoder(ItemStateReason) {
   use item_state_reason <- decode.then(decode.string)
   case item_state_reason {
+    "resolved" -> decode.success(Resolved)
+    "outdated" -> decode.success(Outdated)
     "duplicate" -> decode.success(Duplicate)
     "not_planned" -> decode.success(NotPlanned)
     "reopened" -> decode.success(Reopened)
     "completed" -> decode.success(Completed)
-    "outdated" -> decode.success(Outdated)
-    "resolved" -> decode.success(Resolved)
-    _ -> decode.failure(Duplicate, "ItemStateReason")
+    _ -> decode.failure(Resolved, "ItemStateReason")
   }
 }
 
 fn item_state_reason_encoder(item_state_reason) -> pog.Value {
   case item_state_reason {
+    Resolved -> "resolved"
+    Outdated -> "outdated"
     Duplicate -> "duplicate"
     NotPlanned -> "not_planned"
     Reopened -> "reopened"
     Completed -> "completed"
-    Outdated -> "outdated"
-    Resolved -> "resolved"
   }
   |> pog.text
 }/// Corresponds to the Postgres `item_type` enum.
@@ -389,209 +673,4 @@ fn item_type_encoder(item_type) -> pog.Value {
     Issue -> "issue"
   }
   |> pog.text
-}
-
-// --- Dashboard queries -------------------------------------------------------
-
-pub type DashboardTopPairsRow {
-  DashboardTopPairsRow(
-    source_item_id: Int,
-    target_item_id: Int,
-    similarity: Float,
-    source_number: Int,
-    source_title: String,
-    source_item_type: ItemType,
-    source_state: ItemState,
-    source_state_reason: Option(ItemStateReason),
-    target_number: Int,
-    target_title: String,
-    target_item_type: ItemType,
-    target_state: ItemState,
-    target_state_reason: Option(ItemStateReason),
-  )
-}
-
-pub fn dashboard_top_pairs(
-  db: pog.Connection,
-  arg_1: Int,
-) -> Result(pog.Returned(DashboardTopPairsRow), pog.QueryError) {
-  let decoder = {
-    use source_item_id <- decode.field(0, decode.int)
-    use target_item_id <- decode.field(1, decode.int)
-    use similarity <- decode.field(2, decode.float)
-    use source_number <- decode.field(3, decode.int)
-    use source_title <- decode.field(4, decode.string)
-    use source_item_type <- decode.field(5, item_type_decoder())
-    use source_state <- decode.field(6, item_state_decoder())
-    use source_state_reason <- decode.field(
-      7,
-      decode.optional(item_state_reason_decoder()),
-    )
-    use target_number <- decode.field(8, decode.int)
-    use target_title <- decode.field(9, decode.string)
-    use target_item_type <- decode.field(10, item_type_decoder())
-    use target_state <- decode.field(11, item_state_decoder())
-    use target_state_reason <- decode.field(
-      12,
-      decode.optional(item_state_reason_decoder()),
-    )
-    decode.success(DashboardTopPairsRow(
-      source_item_id:,
-      target_item_id:,
-      similarity:,
-      source_number:,
-      source_title:,
-      source_item_type:,
-      source_state:,
-      source_state_reason:,
-      target_number:,
-      target_title:,
-      target_item_type:,
-      target_state:,
-      target_state_reason:,
-    ))
-  }
-
-  "SELECT e.source_item_id,
-       e.target_item_id,
-       e.similarity,
-       src.number       AS source_number,
-       src.title        AS source_title,
-       src.item_type    AS source_item_type,
-       src.state        AS source_state,
-       src.state_reason AS source_state_reason,
-       tgt.number       AS target_number,
-       tgt.title        AS target_title,
-       tgt.item_type    AS target_item_type,
-       tgt.state        AS target_state,
-       tgt.state_reason AS target_state_reason
-FROM item_similarity_edges e
-         JOIN items src ON src.github_id = e.source_item_id
-         JOIN items tgt ON tgt.github_id = e.target_item_id
-WHERE NOT EXISTS (SELECT 1
-                  FROM item_duplicates d
-                  WHERE (d.source_item_id = e.source_item_id AND d.target_item_id = e.target_item_id)
-                     OR (d.source_item_id = e.target_item_id AND d.target_item_id = e.source_item_id))
-ORDER BY e.similarity DESC
-LIMIT $1;"
-  |> pog.query
-  |> pog.parameter(pog.int(arg_1))
-  |> pog.returning(decoder)
-  |> pog.execute(db)
-}
-
-pub type DashboardRecentItemsRow {
-  DashboardRecentItemsRow(
-    github_id: Int,
-    number: Int,
-    item_type: ItemType,
-    title: String,
-    state: ItemState,
-    state_reason: Option(ItemStateReason),
-    url: String,
-    github_created_at: Timestamp,
-  )
-}
-
-pub fn dashboard_recent_items(
-  db: pog.Connection,
-  arg_1: Int,
-) -> Result(pog.Returned(DashboardRecentItemsRow), pog.QueryError) {
-  let decoder = {
-    use github_id <- decode.field(0, decode.int)
-    use number <- decode.field(1, decode.int)
-    use item_type <- decode.field(2, item_type_decoder())
-    use title <- decode.field(3, decode.string)
-    use state <- decode.field(4, item_state_decoder())
-    use state_reason <- decode.field(
-      5,
-      decode.optional(item_state_reason_decoder()),
-    )
-    use url <- decode.field(6, decode.string)
-    use github_created_at <- decode.field(7, pog.timestamp_decoder())
-    decode.success(DashboardRecentItemsRow(
-      github_id:,
-      number:,
-      item_type:,
-      title:,
-      state:,
-      state_reason:,
-      url:,
-      github_created_at:,
-    ))
-  }
-
-  "SELECT github_id,
-       number,
-       item_type,
-       title,
-       state,
-       state_reason,
-       url,
-       github_created_at
-FROM items
-ORDER BY github_created_at DESC
-LIMIT $1;"
-  |> pog.query
-  |> pog.parameter(pog.int(arg_1))
-  |> pog.returning(decoder)
-  |> pog.execute(db)
-}
-
-pub type DashboardStatsRow {
-  DashboardStatsRow(
-    items_total: Int,
-    items_issues: Int,
-    items_discussions: Int,
-    embeddings_total: Int,
-    edges_total: Int,
-    duplicates_total: Int,
-    jobs_backfill_pending: Int,
-    jobs_embeddings_pending: Int,
-    jobs_similarity_pending: Int,
-    jobs_failed: Int,
-  )
-}
-
-pub fn dashboard_stats(
-  db: pog.Connection,
-) -> Result(pog.Returned(DashboardStatsRow), pog.QueryError) {
-  let decoder = {
-    use items_total <- decode.field(0, decode.int)
-    use items_issues <- decode.field(1, decode.int)
-    use items_discussions <- decode.field(2, decode.int)
-    use embeddings_total <- decode.field(3, decode.int)
-    use edges_total <- decode.field(4, decode.int)
-    use duplicates_total <- decode.field(5, decode.int)
-    use jobs_backfill_pending <- decode.field(6, decode.int)
-    use jobs_embeddings_pending <- decode.field(7, decode.int)
-    use jobs_similarity_pending <- decode.field(8, decode.int)
-    use jobs_failed <- decode.field(9, decode.int)
-    decode.success(DashboardStatsRow(
-      items_total:,
-      items_issues:,
-      items_discussions:,
-      embeddings_total:,
-      edges_total:,
-      duplicates_total:,
-      jobs_backfill_pending:,
-      jobs_embeddings_pending:,
-      jobs_similarity_pending:,
-      jobs_failed:,
-    ))
-  }
-
-  "SELECT (SELECT COUNT(*) FROM items)                                           AS items_total,
-       (SELECT COUNT(*) FROM items WHERE item_type = 'issue')                 AS items_issues,
-       (SELECT COUNT(*) FROM items WHERE item_type = 'discussion')            AS items_discussions,
-       (SELECT COUNT(*) FROM item_embeddings)                                 AS embeddings_total,
-       (SELECT COUNT(*) FROM item_similarity_edges)                           AS edges_total,
-       (SELECT COUNT(*) FROM item_duplicates)                                 AS duplicates_total,
-       (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'backfill'    AND status = 'pending')   AS jobs_backfill_pending,
-       (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'embeddings'  AND status = 'pending')   AS jobs_embeddings_pending,
-       (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'similarity'  AND status = 'pending')   AS jobs_similarity_pending,
-       (SELECT COUNT(*) FROM m25.job WHERE status = 'failed')                                   AS jobs_failed;"
-  |> pog.query
-  |> pog.returning(decoder)
-  |> pog.execute(db)
 }

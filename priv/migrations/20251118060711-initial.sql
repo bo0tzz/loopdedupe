@@ -18,15 +18,18 @@ CREATE TYPE duplicate_source AS ENUM (
 CREATE TABLE items
 (
     github_id          BIGINT PRIMARY KEY,
-    number             INTEGER     NOT NULL,
-    item_type          item_type   NOT NULL,
-    title              TEXT        NOT NULL,
-    body               TEXT        NOT NULL,
-    state              item_state  NOT NULL,
+    number             INTEGER   NOT NULL,
+    item_type          item_type NOT NULL,
+    title              TEXT      NOT NULL,
+    body               TEXT      NOT NULL,
+    state              item_state NOT NULL,
     state_reason       item_state_reason,
-    url                TEXT        NOT NULL,
-    github_created_at  TIMESTAMPTZ NOT NULL,
-    github_updated_at  TIMESTAMPTZ NOT NULL
+    url                TEXT      NOT NULL,
+    -- Stored without time zone; always UTC by convention. squirrel can't
+    -- handle timestamptz, and GitHub already gives us UTC, so we drop the
+    -- tz tag rather than fight the codegen.
+    github_created_at  TIMESTAMP NOT NULL,
+    github_updated_at  TIMESTAMP NOT NULL
 );
 
 CREATE INDEX ON items (github_created_at DESC);

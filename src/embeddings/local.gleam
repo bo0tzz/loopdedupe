@@ -108,7 +108,7 @@ pub fn embed(text: String) -> Result(#(List(Float), EmbedModel), snag.Snag) {
     |> json.to_string()
 
   use base_req <- result.try(
-    request.to("http://192.168.1.13:8080/v1/embeddings")
+    request.to("http://localhost:8080/v1/embeddings")
     |> result.map_error(fn(_) { snag.new("failed to create base request") }),
   )
   let req =

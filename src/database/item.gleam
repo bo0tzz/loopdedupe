@@ -52,20 +52,41 @@ fn state_reason_into_sql(
   })
 }
 
+// squirrel can't express a nullable parameter, so the upsert is split:
+// when state_reason is Some we use upsert_item, when None we use
+// upsert_item_without_reason which omits the column from the INSERT and
+// nulls it in the UPDATE branch.
 pub fn upsert(db: pog.Connection, issue: types.Issue) {
-  sql.upsert_item(
-    db,
-    issue.github_id,
-    issue.number,
-    sql.Issue,
-    issue.title,
-    issue.body,
-    issue.state |> state_into_sql(),
-    issue.state_reason |> state_reason_into_sql(),
-    issue.url,
-    issue.created_at,
-    issue.updated_at,
-  )
+  let state = state_into_sql(issue.state)
+  case state_reason_into_sql(issue.state_reason) {
+    option.Some(reason) ->
+      sql.upsert_item(
+        db,
+        issue.github_id,
+        issue.number,
+        sql.Issue,
+        issue.title,
+        issue.body,
+        state,
+        reason,
+        issue.url,
+        issue.created_at,
+        issue.updated_at,
+      )
+    option.None ->
+      sql.upsert_item_without_reason(
+        db,
+        issue.github_id,
+        issue.number,
+        sql.Issue,
+        issue.title,
+        issue.body,
+        state,
+        issue.url,
+        issue.created_at,
+        issue.updated_at,
+      )
+  }
 }
 
 pub fn list(db: pog.Connection) -> Result(List(types.Issue), pog.QueryError) {
