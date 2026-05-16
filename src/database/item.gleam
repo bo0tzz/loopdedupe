@@ -2,20 +2,20 @@ import database/sql
 import github/types
 import gleam/int
 import gleam/list
-import gleam/option
+import gleam/option.{type Option}
 import gleam/result
 import gleam/string
 import pog
 import snag
 
-fn sql_into_state(sql: sql.GithubState) -> types.IssueState {
+fn sql_into_state(sql: sql.ItemState) -> types.ItemState {
   case sql {
     sql.Open -> types.Open
     sql.Closed -> types.Closed
   }
 }
 
-fn state_into_sql(state: types.IssueState) -> sql.GithubState {
+fn state_into_sql(state: types.ItemState) -> sql.ItemState {
   case state {
     types.Open -> sql.Open
     types.Closed -> sql.Closed
@@ -23,30 +23,33 @@ fn state_into_sql(state: types.IssueState) -> sql.GithubState {
 }
 
 fn sql_into_state_reason(
-  sql: option.Option(sql.GithubStateReason),
-) -> types.IssueStateReason {
-  case sql {
-    // TODO (see github/types)
-    option.None -> types.Completed
-    option.Some(some) ->
-      case some {
-        sql.Reopened -> types.Reopened
-        sql.NotPlanned -> types.NotPlanned
-        sql.Duplicate -> types.Duplicate
-        sql.Completed -> types.Completed
-      }
-  }
+  sql: Option(sql.ItemStateReason),
+) -> Option(types.ItemStateReason) {
+  option.map(sql, fn(reason) {
+    case reason {
+      sql.Reopened -> types.Reopened
+      sql.NotPlanned -> types.NotPlanned
+      sql.Duplicate -> types.Duplicate
+      sql.Completed -> types.Completed
+      sql.Outdated -> types.Outdated
+      sql.Resolved -> types.Resolved
+    }
+  })
 }
 
 fn state_reason_into_sql(
-  reason: types.IssueStateReason,
-) -> sql.GithubStateReason {
-  case reason {
-    types.Reopened -> sql.Reopened
-    types.NotPlanned -> sql.NotPlanned
-    types.Duplicate -> sql.Duplicate
-    types.Completed -> sql.Completed
-  }
+  reason: Option(types.ItemStateReason),
+) -> Option(sql.ItemStateReason) {
+  option.map(reason, fn(reason) {
+    case reason {
+      types.Reopened -> sql.Reopened
+      types.NotPlanned -> sql.NotPlanned
+      types.Duplicate -> sql.Duplicate
+      types.Completed -> sql.Completed
+      types.Outdated -> sql.Outdated
+      types.Resolved -> sql.Resolved
+    }
+  })
 }
 
 pub fn upsert(db: pog.Connection, issue: types.Issue) {

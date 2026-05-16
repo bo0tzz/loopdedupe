@@ -57,8 +57,8 @@ pub type ListItemsRow {
     item_type: ItemType,
     title: String,
     body: String,
-    state: GithubState,
-    state_reason: Option(GithubStateReason),
+    state: ItemState,
+    state_reason: Option(ItemStateReason),
     url: String,
   )
 }
@@ -78,10 +78,10 @@ pub fn list_items(
     use item_type <- decode.field(2, item_type_decoder())
     use title <- decode.field(3, decode.string)
     use body <- decode.field(4, decode.string)
-    use state <- decode.field(5, github_state_decoder())
+    use state <- decode.field(5, item_state_decoder())
     use state_reason <- decode.field(
       6,
-      decode.optional(github_state_reason_decoder()),
+      decode.optional(item_state_reason_decoder()),
     )
     use url <- decode.field(7, decode.string)
     decode.success(ListItemsRow(
@@ -114,8 +114,8 @@ pub type SelectItemRow {
     number: Int,
     title: String,
     body: String,
-    state: GithubState,
-    state_reason: Option(GithubStateReason),
+    state: ItemState,
+    state_reason: Option(ItemStateReason),
     url: String,
   )
 }
@@ -135,10 +135,10 @@ pub fn select_item(
     use number <- decode.field(1, decode.int)
     use title <- decode.field(2, decode.string)
     use body <- decode.field(3, decode.string)
-    use state <- decode.field(4, github_state_decoder())
+    use state <- decode.field(4, item_state_decoder())
     use state_reason <- decode.field(
       5,
-      decode.optional(github_state_reason_decoder()),
+      decode.optional(item_state_reason_decoder()),
     )
     use url <- decode.field(6, decode.string)
     decode.success(SelectItemRow(
@@ -172,8 +172,8 @@ pub type SuggestDuplicatesRow {
     target_item_id: Int,
     similarity: Float,
     title: String,
-    state: GithubState,
-    state_reason: Option(GithubStateReason),
+    state: ItemState,
+    state_reason: Option(ItemStateReason),
   )
 }
 
@@ -192,10 +192,10 @@ pub fn suggest_duplicates(
     use target_item_id <- decode.field(0, decode.int)
     use similarity <- decode.field(1, decode.float)
     use title <- decode.field(2, decode.string)
-    use state <- decode.field(3, github_state_decoder())
+    use state <- decode.field(3, item_state_decoder())
     use state_reason <- decode.field(
       4,
-      decode.optional(github_state_reason_decoder()),
+      decode.optional(item_state_reason_decoder()),
     )
     decode.success(SuggestDuplicatesRow(
       target_item_id:,
@@ -249,8 +249,8 @@ pub fn upsert_item(
   arg_3: ItemType,
   arg_4: String,
   arg_5: String,
-  arg_6: GithubState,
-  arg_7: GithubStateReason,
+  arg_6: ItemState,
+  arg_7: Option(ItemStateReason),
   arg_8: String,
 ) -> Result(pog.Returned(Nil), pog.QueryError) {
   let decoder = decode.map(decode.dynamic, fn(_) { Nil })
@@ -270,8 +270,11 @@ ON CONFLICT (github_id) DO UPDATE
   |> pog.parameter(item_type_encoder(arg_3))
   |> pog.parameter(pog.text(arg_4))
   |> pog.parameter(pog.text(arg_5))
-  |> pog.parameter(github_state_encoder(arg_6))
-  |> pog.parameter(github_state_reason_encoder(arg_7))
+  |> pog.parameter(item_state_encoder(arg_6))
+  |> pog.parameter(case arg_7 {
+    option.Some(value) -> item_state_reason_encoder(value)
+    option.None -> pog.null()
+  })
   |> pog.parameter(pog.text(arg_8))
   |> pog.returning(decoder)
   |> pog.execute(db)
@@ -279,60 +282,68 @@ ON CONFLICT (github_id) DO UPDATE
 
 // --- Enums -------------------------------------------------------------------
 
-/// Corresponds to the Postgres `github_state` enum.
+/// Corresponds to the Postgres `item_state` enum.
 ///
 /// > 🐿️ This type definition was generated automatically using v4.6.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub type GithubState {
+pub type ItemState {
   Closed
   Open
 }
 
-fn github_state_decoder() -> decode.Decoder(GithubState) {
-  use github_state <- decode.then(decode.string)
-  case github_state {
+fn item_state_decoder() -> decode.Decoder(ItemState) {
+  use item_state <- decode.then(decode.string)
+  case item_state {
     "closed" -> decode.success(Closed)
     "open" -> decode.success(Open)
-    _ -> decode.failure(Closed, "GithubState")
+    _ -> decode.failure(Closed, "ItemState")
   }
 }
 
-fn github_state_encoder(github_state) -> pog.Value {
-  case github_state {
+fn item_state_encoder(item_state) -> pog.Value {
+  case item_state {
     Closed -> "closed"
     Open -> "open"
   }
   |> pog.text
-}/// Corresponds to the Postgres `github_state_reason` enum.
+}
+
+/// Corresponds to the Postgres `item_state_reason` enum.
 ///
 /// > 🐿️ This type definition was generated automatically using v4.6.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
-pub type GithubStateReason {
+pub type ItemStateReason {
   Duplicate
   NotPlanned
   Reopened
   Completed
+  Outdated
+  Resolved
 }
 
-fn github_state_reason_decoder() -> decode.Decoder(GithubStateReason) {
-  use github_state_reason <- decode.then(decode.string)
-  case github_state_reason {
+fn item_state_reason_decoder() -> decode.Decoder(ItemStateReason) {
+  use item_state_reason <- decode.then(decode.string)
+  case item_state_reason {
     "duplicate" -> decode.success(Duplicate)
     "not_planned" -> decode.success(NotPlanned)
     "reopened" -> decode.success(Reopened)
     "completed" -> decode.success(Completed)
-    _ -> decode.failure(Duplicate, "GithubStateReason")
+    "outdated" -> decode.success(Outdated)
+    "resolved" -> decode.success(Resolved)
+    _ -> decode.failure(Duplicate, "ItemStateReason")
   }
 }
 
-fn github_state_reason_encoder(github_state_reason) -> pog.Value {
-  case github_state_reason {
+fn item_state_reason_encoder(item_state_reason) -> pog.Value {
+  case item_state_reason {
     Duplicate -> "duplicate"
     NotPlanned -> "not_planned"
     Reopened -> "reopened"
     Completed -> "completed"
+    Outdated -> "outdated"
+    Resolved -> "resolved"
   }
   |> pog.text
 }/// Corresponds to the Postgres `item_type` enum.

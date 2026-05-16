@@ -1,53 +1,59 @@
 import gleam/dynamic/decode
 import gleam/json
-import gleam/option
+import gleam/option.{type Option}
 import gleam/string
 
-pub type IssueState {
+pub type ItemState {
   Open
   Closed
 }
 
-fn issue_state_to_json(issue_state: IssueState) -> json.Json {
-  case issue_state {
+fn item_state_to_json(state: ItemState) -> json.Json {
+  case state {
     Open -> json.string("open")
     Closed -> json.string("closed")
   }
 }
 
-fn issue_state_decoder() {
+fn item_state_decoder() {
   use string <- decode.then(decode.string)
   case string |> string.lowercase() {
     "open" -> decode.success(Open)
     "closed" -> decode.success(Closed)
-    _ -> decode.failure(Open, "IssueState")
+    _ -> decode.failure(Open, "ItemState")
   }
 }
 
-pub type IssueStateReason {
+pub type ItemStateReason {
   Completed
   Duplicate
   NotPlanned
   Reopened
+  Outdated
+  Resolved
 }
 
-fn issue_state_reason_to_json(issue_state_reason: IssueStateReason) -> json.Json {
-  case issue_state_reason {
+fn item_state_reason_to_json(reason: ItemStateReason) -> json.Json {
+  case reason {
     Completed -> json.string("completed")
     Duplicate -> json.string("duplicate")
     NotPlanned -> json.string("not_planned")
     Reopened -> json.string("reopened")
+    Outdated -> json.string("outdated")
+    Resolved -> json.string("resolved")
   }
 }
 
-fn issue_state_reason_decoder() -> decode.Decoder(IssueStateReason) {
+fn item_state_reason_decoder() -> decode.Decoder(ItemStateReason) {
   use variant <- decode.then(decode.string)
   case variant |> string.lowercase() {
     "completed" -> decode.success(Completed)
     "duplicate" -> decode.success(Duplicate)
     "not_planned" -> decode.success(NotPlanned)
     "reopened" -> decode.success(Reopened)
-    _ -> decode.failure(Completed, "IssueStateReason")
+    "outdated" -> decode.success(Outdated)
+    "resolved" -> decode.success(Resolved)
+    _ -> decode.failure(Completed, "ItemStateReason")
   }
 }
 
@@ -57,8 +63,8 @@ pub type Issue {
     number: Int,
     title: String,
     body: String,
-    state: IssueState,
-    state_reason: IssueStateReason,
+    state: ItemState,
+    state_reason: Option(ItemStateReason),
     url: String,
   )
 }
@@ -71,8 +77,8 @@ pub fn issue_to_json(issue: Issue) -> json.Json {
     #("number", json.int(number)),
     #("title", json.string(title)),
     #("body", json.string(body)),
-    #("state", issue_state_to_json(state)),
-    #("state_reason", issue_state_reason_to_json(state_reason)),
+    #("state", item_state_to_json(state)),
+    #("state_reason", json.nullable(state_reason, item_state_reason_to_json)),
     #("url", json.string(url)),
   ])
 }
@@ -86,20 +92,15 @@ pub fn issue_decoder() {
   use number <- decode.field("number", decode.int)
   use title <- decode.field("title", decode.string)
   use body <- decode.field("body", decode.string)
-  use state <- decode.field("state", issue_state_decoder())
-  // TODO: How to propagate Option() through database
+  use state <- decode.field("state", item_state_decoder())
   let state_reason_decoder =
     decode.one_of(
-      decode.at(["state_reason"], decode.optional(issue_state_reason_decoder())),
+      decode.at(["state_reason"], decode.optional(item_state_reason_decoder())),
       or: [
-        decode.at(
-          ["stateReason"],
-          decode.optional(issue_state_reason_decoder()),
-        ),
+        decode.at(["stateReason"], decode.optional(item_state_reason_decoder())),
       ],
     )
-use state_reason_opt <- decode.then(state_reason_decoder)
-  let state_reason = option.unwrap(state_reason_opt, Completed)
+  use state_reason <- decode.then(state_reason_decoder)
   use url <- decode.field("url", decode.string)
 
   decode.success(Issue(
@@ -129,8 +130,8 @@ pub type SuggestedDuplicate {
     similarity: Float,
     github_id: Int,
     title: String,
-    state: IssueState,
-    state_reason: IssueStateReason,
+    state: ItemState,
+    state_reason: Option(ItemStateReason),
   )
 }
 
@@ -143,8 +144,8 @@ fn suggested_duplicate_to_json(
     #("similarity", json.float(similarity)),
     #("github_id", json.int(github_id)),
     #("title", json.string(title)),
-    #("state", issue_state_to_json(state)),
-    #("state_reason", issue_state_reason_to_json(state_reason)),
+    #("state", item_state_to_json(state)),
+    #("state_reason", json.nullable(state_reason, item_state_reason_to_json)),
   ])
 }
 
