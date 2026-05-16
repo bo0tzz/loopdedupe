@@ -110,6 +110,7 @@ fn style_block() -> String {
     .similarity { font-variant-numeric: tabular-nums; font-weight: 600; }
     .kind { display: inline-block; font-size: 0.7em; padding: 0.1em 0.4em; border-radius: 3px; background: #ddd; color: #333; vertical-align: middle; margin-right: 0.3em; }
     .kind-discussion { background: #c8e6c9; }
+    .resolution-hint { font-size: 0.75em; opacity: 0.6; font-style: italic; margin-left: 0.5em; }
     .state-closed { opacity: 0.55; }
     .state-duplicate { text-decoration: line-through; opacity: 0.55; }
     .item-body { white-space: pre-wrap; background: #f6f6f6; padding: 1em; border-radius: 6px; }
@@ -164,20 +165,22 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
           <> format_similarity(row.similarity)
           <> "</td><td>"
           <> pair_side(
-            row.source_item_id,
+            row.source_id,
             row.source_number,
             row.source_title,
             row.source_item_type,
             row.source_state,
             row.source_state_reason,
+            row.source_id != row.source_original_id,
           )
           <> pair_side(
-            row.target_item_id,
+            row.target_id,
             row.target_number,
             row.target_title,
             row.target_item_type,
             row.target_state,
             row.target_state_reason,
+            row.target_id != row.target_original_id,
           )
           <> "</td></tr>"
         })
@@ -194,7 +197,12 @@ fn pair_side(
   item_type: sql.ItemType,
   state: sql.ItemState,
   state_reason: Option(sql.ItemStateReason),
+  resolved_via_chain: Bool,
 ) -> String {
+  let resolution_hint = case resolved_via_chain {
+    True -> " <span class=\"resolution-hint\">↪ resolved canonical</span>"
+    False -> ""
+  }
   "<a class=\"pair "
   <> state_class(state, state_reason)
   <> "\" href=\"/items/"
@@ -205,6 +213,7 @@ fn pair_side(
   <> int.to_string(number)
   <> " "
   <> escape(title)
+  <> resolution_hint
   <> "</a>"
 }
 
