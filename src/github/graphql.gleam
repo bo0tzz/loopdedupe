@@ -22,7 +22,7 @@ pub fn list_items(client: squall.Client, cursor: Option(String)) {
     "
     query ListItems($cursor: String) {
       repository(owner: \"immich-app\", name: \"immich\") {
-        issues(first: 10, after: $cursor) {
+        issues(first: 100, after: $cursor) {
           nodes {
               databaseId
               number

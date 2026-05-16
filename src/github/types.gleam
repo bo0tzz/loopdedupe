@@ -110,6 +110,13 @@ fn timestamp_decoder() -> decode.Decoder(Timestamp) {
   }
 }
 
+// Postgres TEXT columns reject null bytes (0x00) with character_not_in_repertoire
+// even though they're valid UTF-8. A handful of immich issue bodies contain them
+// (probably copy-pasted from binary dumps), so we strip at ingest.
+fn safe_string() -> decode.Decoder(String) {
+  decode.string |> decode.map(string.replace(_, "\u{0000}", ""))
+}
+
 pub fn issue_decoder() {
   let id_decoder =
     decode.one_of(decode.at(["id"], decode.int), or: [
@@ -117,8 +124,8 @@ pub fn issue_decoder() {
     ])
   use github_id <- decode.then(id_decoder)
   use number <- decode.field("number", decode.int)
-  use title <- decode.field("title", decode.string)
-  use body <- decode.field("body", decode.string)
+  use title <- decode.field("title", safe_string())
+  use body <- decode.field("body", safe_string())
   use state <- decode.field("state", item_state_decoder())
   let state_reason_decoder =
     decode.one_of(

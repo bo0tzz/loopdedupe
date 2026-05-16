@@ -86,7 +86,7 @@ pub fn handle_backfill_job(
     graphql.list_items(ctx.github_client, backfill_job.cursor)
     |> result.map_error(map_string_to_error),
   )
-  let _ =
+  use _ <- result.try(
     pog.transaction(ctx.db, fn(conn) {
       use _ <- result.try(
         list.map(items.items, fn(bi) { item.upsert(conn, bi.issue) })
@@ -117,6 +117,8 @@ pub fn handle_backfill_job(
         option.None -> Ok(Nil)
       }
     })
+    |> result.map_error(map_error),
+  )
 
   Ok("backfilled")
 }
