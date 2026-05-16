@@ -1,6 +1,7 @@
 import database/embeddings
 import database/item
 import embeddings/local
+import embeddings/strip
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -86,7 +87,17 @@ pub fn handle_embeddings_job(
     |> result.map_error(fn(s) { EmbeddingsJobError(snag.line_print(s)) }),
   )
 
-  let embed_text = "# " <> item.title <> "\n\n" <> item.body
+  // Empirically-tuned input format for E5-Mistral-7B (see commit message):
+  //   - The </s> terminator is required for last-token pooling to read the
+  //     embedding off a stable position. Without it the pooled vector
+  //     samples whatever token the body trails into (template tail, code
+  //     fence, whitespace), and everything collapses to a narrow cone
+  //     where unrelated issues sit at ~97% similarity.
+  //   - Raw body content actively hurts discrimination because immich's
+  //     issue template makes most bodies look ~85% identical at the token
+  //     level ('### Reproduction steps', version stacks, etc.). Stripping
+  //     the template scaffolding recovers most of the body's real signal.
+  let embed_text = item.title <> "\n\n" <> strip.strip_template(item.body) <> "</s>"
   use #(embedding, model) <- result.try(
     local.embed(embed_text) |> result.map_error(map_snag_to_error),
   )

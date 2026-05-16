@@ -117,7 +117,11 @@ pub fn select(
 }
 
 pub fn suggest_duplicates(db: pog.Connection, item_id: Int) {
-  case sql.suggest_duplicates(db, item_id, 0.7) {
+  // With the title+stripped-body+EOS embed format on E5-Mistral, related
+  // pairs sit around 0.85-0.92 in our small validation set while unrelated
+  // pairs land at 0.70-0.80. 0.85 is the threshold that cleanly separates
+  // them; revisit once we have real maintainer judgments to tune against.
+  case sql.suggest_duplicates(db, item_id, 0.85) {
     Ok(pog.Returned(_, rows)) -> {
       //TODO: Resolve canonical/root items in query
       let items =
