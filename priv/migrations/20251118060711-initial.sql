@@ -17,15 +17,19 @@ CREATE TYPE duplicate_source AS ENUM (
 
 CREATE TABLE items
 (
-    github_id    BIGINT PRIMARY KEY,
-    number       INTEGER    NOT NULL,
-    item_type    item_type  NOT NULL,
-    title        TEXT       NOT NULL,
-    body         TEXT       NOT NULL,
-    state        item_state NOT NULL,
-    state_reason item_state_reason,
-    url          TEXT       NOT NULL
+    github_id          BIGINT PRIMARY KEY,
+    number             INTEGER     NOT NULL,
+    item_type          item_type   NOT NULL,
+    title              TEXT        NOT NULL,
+    body               TEXT        NOT NULL,
+    state              item_state  NOT NULL,
+    state_reason       item_state_reason,
+    url                TEXT        NOT NULL,
+    github_created_at  TIMESTAMPTZ NOT NULL,
+    github_updated_at  TIMESTAMPTZ NOT NULL
 );
+
+CREATE INDEX ON items (github_created_at DESC);
 
 CREATE EXTENSION IF NOT EXISTS vchord CASCADE;
 

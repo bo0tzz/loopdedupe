@@ -6,6 +6,7 @@
 
 import gleam/dynamic/decode
 import gleam/option.{type Option}
+import gleam/time/timestamp.{type Timestamp}
 import pog
 
 /// Runs the `compute_edges` query
@@ -60,6 +61,8 @@ pub type ListItemsRow {
     state: ItemState,
     state_reason: Option(ItemStateReason),
     url: String,
+    github_created_at: Timestamp,
+    github_updated_at: Timestamp,
   )
 }
 
@@ -84,6 +87,8 @@ pub fn list_items(
       decode.optional(item_state_reason_decoder()),
     )
     use url <- decode.field(7, decode.string)
+    use github_created_at <- decode.field(8, pog.timestamp_decoder())
+    use github_updated_at <- decode.field(9, pog.timestamp_decoder())
     decode.success(ListItemsRow(
       github_id:,
       number:,
@@ -93,6 +98,8 @@ pub fn list_items(
       state:,
       state_reason:,
       url:,
+      github_created_at:,
+      github_updated_at:,
     ))
   }
 
@@ -117,6 +124,8 @@ pub type SelectItemRow {
     state: ItemState,
     state_reason: Option(ItemStateReason),
     url: String,
+    github_created_at: Timestamp,
+    github_updated_at: Timestamp,
   )
 }
 
@@ -141,6 +150,8 @@ pub fn select_item(
       decode.optional(item_state_reason_decoder()),
     )
     use url <- decode.field(6, decode.string)
+    use github_created_at <- decode.field(7, pog.timestamp_decoder())
+    use github_updated_at <- decode.field(8, pog.timestamp_decoder())
     decode.success(SelectItemRow(
       github_id:,
       number:,
@@ -149,10 +160,12 @@ pub fn select_item(
       state:,
       state_reason:,
       url:,
+      github_created_at:,
+      github_updated_at:,
     ))
   }
 
-  "SELECT github_id, number, title, body, state, state_reason, url
+  "SELECT github_id, number, title, body, state, state_reason, url, github_created_at, github_updated_at
 FROM items
 WHERE github_id = $1;"
   |> pog.query
@@ -252,18 +265,21 @@ pub fn upsert_item(
   arg_6: ItemState,
   arg_7: Option(ItemStateReason),
   arg_8: String,
+  arg_9: Timestamp,
+  arg_10: Timestamp,
 ) -> Result(pog.Returned(Nil), pog.QueryError) {
   let decoder = decode.map(decode.dynamic, fn(_) { Nil })
 
-  "INSERT INTO items (github_id, number, item_type, title, body, state, state_reason, url)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+  "INSERT INTO items (github_id, number, item_type, title, body, state, state_reason, url, github_created_at, github_updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (github_id) DO UPDATE
-    SET number       = EXCLUDED.number,
-        title        = EXCLUDED.title,
-        body         = EXCLUDED.body,
-        state        = EXCLUDED.state,
-        state_reason = EXCLUDED.state_reason,
-        url          = EXCLUDED.url;"
+    SET number            = EXCLUDED.number,
+        title             = EXCLUDED.title,
+        body              = EXCLUDED.body,
+        state             = EXCLUDED.state,
+        state_reason      = EXCLUDED.state_reason,
+        url               = EXCLUDED.url,
+        github_updated_at = EXCLUDED.github_updated_at;"
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
   |> pog.parameter(pog.int(arg_2))
@@ -276,6 +292,8 @@ ON CONFLICT (github_id) DO UPDATE
     option.None -> pog.null()
   })
   |> pog.parameter(pog.text(arg_8))
+  |> pog.parameter(pog.timestamp(arg_9))
+  |> pog.parameter(pog.timestamp(arg_10))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }

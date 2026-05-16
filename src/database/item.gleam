@@ -63,6 +63,8 @@ pub fn upsert(db: pog.Connection, issue: types.Issue) {
     issue.state |> state_into_sql(),
     issue.state_reason |> state_reason_into_sql(),
     issue.url,
+    issue.created_at,
+    issue.updated_at,
   )
 }
 
@@ -118,6 +120,8 @@ fn map_item(
         state: row.state |> sql_into_state(),
         state_reason: row.state_reason |> sql_into_state_reason(),
         url: row.url,
+        created_at: row.github_created_at,
+        updated_at: row.github_updated_at,
       ))
     Ok(pog.Returned(n, _)) ->
       snag.error("expected 1 row but got " <> int.to_string(n))
@@ -135,6 +139,8 @@ fn map_items(returned: pog.Returned(sql.ListItemsRow)) -> List(types.Issue) {
       state: row.state |> sql_into_state(),
       state_reason: row.state_reason |> sql_into_state_reason(),
       url: row.url,
+      created_at: row.github_created_at,
+      updated_at: row.github_updated_at,
     )
   })
 }

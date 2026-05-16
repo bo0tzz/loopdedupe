@@ -25,6 +25,8 @@ pub fn list_items(client: squall.Client, cursor: option.Option(String)) {
               state
               stateReason
               url
+              createdAt
+              updatedAt
           }
           pageInfo {
               endCursor
