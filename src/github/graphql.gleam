@@ -15,7 +15,7 @@ pub fn list_items(client: squall.Client, cursor: option.Option(String)) {
   let query =
     "
     query ListItems($cursor: String) {
-      repository(owner: \"bo0tzz\", name: \"loopdedupe-test-issues\") {
+      repository(owner: \"immich-app\", name: \"immich\") {
         issues(first: 10, after: $cursor) {
           nodes {
               databaseId

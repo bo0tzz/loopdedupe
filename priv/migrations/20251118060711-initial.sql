@@ -15,7 +15,22 @@ CREATE TABLE items
     url          TEXT         NOT NULL
 );
 
+CREATE EXTENSION IF NOT EXISTS vchord CASCADE;
+
+CREATE TABLE item_embeddings
+(
+    item_id    BIGINT PRIMARY KEY,
+    embedding  vector(4096) NOT NULL,
+    model      TEXT         NOT NULL,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (item_id)
+        REFERENCES items (github_id) ON DELETE CASCADE
+);
+
+CREATE INDEX ON item_embeddings USING vchordrq (embedding vector_cosine_ops);
+
 --- migration:down
+DROP TABLE item_embeddings;
 DROP TABLE items;
 
 DROP TYPE github_state;

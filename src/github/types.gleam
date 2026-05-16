@@ -98,7 +98,7 @@ pub fn issue_decoder() {
         ),
       ],
     )
-  use state_reason_opt <- decode.then(state_reason_decoder)
+use state_reason_opt <- decode.then(state_reason_decoder)
   let state_reason = option.unwrap(state_reason_opt, Completed)
   use url <- decode.field("url", decode.string)
 
