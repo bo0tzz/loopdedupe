@@ -1,11 +1,16 @@
 import config
 import github/types
 import gleam/dynamic/decode
+import gleam/float
 import gleam/httpc
 import gleam/int
 import gleam/json
+import gleam/list
 import gleam/option.{type Option}
+import gleam/result
 import gleam/string
+import gleam/time/duration
+import gleam/time/timestamp.{type Timestamp}
 import squall
 
 // Hardcoded for now — the maintainer whose dupe-close comments we trust.
@@ -33,10 +38,12 @@ pub fn list_items(client: squall.Client, cursor: Option(String)) {
               url
               createdAt
               updatedAt
-              comments(last: 1) {
+              closedAt
+              comments(last: 10) {
                   nodes {
                       author { login }
                       body
+                      createdAt
                   }
               }
               timelineItems(itemTypes: CONVERTED_TO_DISCUSSION_EVENT, last: 1) {
@@ -89,11 +96,17 @@ fn backfill_item_decoder() -> decode.Decoder(BackfillItem) {
   // Two independent signals for the canonical pointer:
   //   - ConvertedToDiscussionEvent (structured, authoritative) — fires when
   //     a maintainer used GitHub's "convert to discussion" button.
-  //   - bo0tzz `#NNN` closing comment (heuristic) — the manual workflow.
-  // In practice these are mutually exclusive (you don't comment `#NNN` on a
+  //   - bo0tzz dupe-pattern comment near the close event (heuristic) — the
+  //     manual workflow.
+  // In practice these are mutually exclusive (you don't comment '#NNN' on a
   // converted issue), but if both fire, conversion wins.
   use converted_to <- decode.then(converted_to_discussion_decoder())
-  use comment_ref <- decode.then(duplicate_of_decoder())
+  use closed_at <- decode.optional_field(
+    "closedAt",
+    option.None,
+    decode.optional(timestamp_decoder()),
+  )
+  use comment_ref <- decode.then(duplicate_of_decoder(closed_at))
   let duplicate_of_number = case converted_to {
     option.Some(_) -> converted_to
     option.None -> comment_ref
@@ -125,32 +138,46 @@ fn converted_to_discussion_decoder() -> decode.Decoder(Option(Int)) {
   decode.success(option.flatten(timeline))
 }
 
-// The dupe signal in the immich workflow is the most recent comment, by the
-// maintainer, whose body is exactly '#NNN' — pointing at the canonical's
-// per-repo number. We deliberately skip comments with more than the bare
-// ref (e.g. "see #123, related to #456") because they're ambiguous; the
-// user can revisit if it turns out to matter.
-fn duplicate_of_decoder() -> decode.Decoder(Option(Int)) {
-  let comment_decoder = {
+// The dupe signal in the immich workflow is a maintainer comment near the
+// close event whose body matches a known dupe-pattern ('#NNN', 'Duplicate
+// of #NNN', 'Dupe of #NNN'). Anchoring to the close timestamp is what
+// keeps us from picking up unrelated dupe-pattern comments left long
+// before or long after the actual triage action (users sometimes reply
+// to closed issues days later with questions).
+//
+// Open issues skip this entirely — without a close timestamp there's
+// nothing to align to and a maintainer hasn't declared anything.
+fn duplicate_of_decoder(
+  close_at: Option(Timestamp),
+) -> decode.Decoder(Option(Int)) {
+  let dupe_comment_decoder = {
     use author_login <- decode.optional_field(
       "author",
       option.None,
       decode.optional(decode.at(["login"], decode.string)),
     )
+    use created_at <- decode.field("createdAt", timestamp_decoder())
     use body <- decode.field("body", decode.string)
     case author_login {
       option.Some(login) if login == dupe_comment_maintainer ->
-        decode.success(parse_dupe_ref(body))
+        case parse_dupe_ref(body) {
+          option.Some(n) -> decode.success(option.Some(#(created_at, n)))
+          option.None -> decode.success(option.None)
+        }
       _ -> decode.success(option.None)
     }
   }
 
   let comments_decoder = {
-    use nodes <- decode.field("nodes", decode.list(comment_decoder))
-    case nodes {
-      [first, ..] -> decode.success(first)
-      [] -> decode.success(option.None)
-    }
+    use nodes <- decode.field("nodes", decode.list(dupe_comment_decoder))
+    let matches =
+      list.filter_map(nodes, fn(x) {
+        case x {
+          option.Some(v) -> Ok(v)
+          option.None -> Error(Nil)
+        }
+      })
+    decode.success(pick_closest_to_close(close_at, matches))
   }
 
   use comments <- decode.optional_field(
@@ -161,14 +188,83 @@ fn duplicate_of_decoder() -> decode.Decoder(Option(Int)) {
   decode.success(option.flatten(comments))
 }
 
+// Five-minute window matches the immich maintainer workflow: comment then
+// close (or vice versa) within a few seconds. Wider windows risk catching
+// dupe-pattern comments from much earlier (e.g. discussion of which old
+// issue might be related) that aren't authoritative.
+const close_alignment_window_seconds = 300.0
+
+fn pick_closest_to_close(
+  close_at: Option(Timestamp),
+  candidates: List(#(Timestamp, Int)),
+) -> Option(Int) {
+  case close_at {
+    option.None -> option.None
+    option.Some(ct) -> {
+      candidates
+      |> list.filter_map(fn(pair) {
+        let #(t, n) = pair
+        let delta =
+          timestamp.difference(ct, t)
+          |> duration.to_seconds
+          |> float.absolute_value
+        case delta <=. close_alignment_window_seconds {
+          True -> Ok(#(delta, n))
+          False -> Error(Nil)
+        }
+      })
+      |> list.sort(fn(a, b) { float.compare(a.0, b.0) })
+      |> list.first
+      |> result.map(fn(p) { p.1 })
+      |> option.from_result
+    }
+  }
+}
+
+fn timestamp_decoder() -> decode.Decoder(Timestamp) {
+  use s <- decode.then(decode.string)
+  case timestamp.parse_rfc3339(s) {
+    Ok(t) -> decode.success(t)
+    Error(_) -> decode.failure(timestamp.from_unix_seconds(0), "Timestamp")
+  }
+}
+
+// Parse a comment body for a dupe pointer like '#NNN'. We accept the bare
+// form ('#992') and a small set of known prefixes ('Duplicate of #992',
+// 'Dupe of #992', 'Now tracked in #992') with optional trailing period —
+// these are the phrasings the maintainer actually uses. We deliberately
+// don't try to extract '#NNN' from arbitrary prose because comments often
+// reference related-but-not-canonical PRs/issues ('see #123', 'fix in
+// #123'), which would poison the dupe graph.
 fn parse_dupe_ref(body: String) -> Option(Int) {
-  case string.trim(body) {
-    "#" <> rest ->
-      case int.parse(string.trim(rest)) {
+  let trimmed = string.trim(body)
+  let core = trimmed |> strip_dupe_prefix |> string.trim
+  case core {
+    "#" <> rest -> {
+      let digits = rest |> string.trim |> trim_trailing_period
+      case int.parse(digits) {
         Ok(n) -> option.Some(n)
         Error(_) -> option.None
       }
+    }
     _ -> option.None
+  }
+}
+
+fn strip_dupe_prefix(text: String) -> String {
+  case string.lowercase(text) {
+    "duplicate of " <> _ -> string.drop_start(text, 13)
+    "dupe of " <> _ -> string.drop_start(text, 8)
+    "now tracked in " <> _ -> string.drop_start(text, 15)
+    "closing as duplicate of " <> _ -> string.drop_start(text, 24)
+    _ -> text
+  }
+}
+
+fn trim_trailing_period(s: String) -> String {
+  case string.ends_with(s, ".") {
+    True -> string.drop_end(s, 1)
+    False -> s
   }
 }
 
@@ -194,10 +290,12 @@ pub fn list_discussions(client: squall.Client, cursor: Option(String)) {
               url
               createdAt
               updatedAt
-              comments(last: 1) {
+              closedAt
+              comments(last: 10) {
                   nodes {
                       author { login }
                       body
+                      createdAt
                   }
               }
           }
@@ -235,7 +333,12 @@ fn list_discussions_response_decoder() -> decode.Decoder(ListItemsResponse) {
 
 fn discussion_backfill_decoder() -> decode.Decoder(BackfillItem) {
   use item <- decode.then(types.discussion_decoder())
-  use duplicate_of_number <- decode.then(duplicate_of_decoder())
+  use closed_at <- decode.optional_field(
+    "closedAt",
+    option.None,
+    decode.optional(timestamp_decoder()),
+  )
+  use duplicate_of_number <- decode.then(duplicate_of_decoder(closed_at))
   decode.success(BackfillItem(item:, duplicate_of_number:))
 }
 
