@@ -39,6 +39,13 @@ pub fn list_items(client: squall.Client, cursor: Option(String)) {
                       body
                   }
               }
+              timelineItems(itemTypes: CONVERTED_TO_DISCUSSION_EVENT, last: 1) {
+                  nodes {
+                      ... on ConvertedToDiscussionEvent {
+                          discussion { number }
+                      }
+                  }
+              }
           }
           pageInfo {
               endCursor
@@ -79,8 +86,43 @@ fn list_items_response_decoder() -> decode.Decoder(ListItemsResponse) {
 
 fn backfill_item_decoder() -> decode.Decoder(BackfillItem) {
   use item <- decode.then(types.issue_decoder())
-  use duplicate_of_number <- decode.then(duplicate_of_decoder())
+  // Two independent signals for the canonical pointer:
+  //   - ConvertedToDiscussionEvent (structured, authoritative) — fires when
+  //     a maintainer used GitHub's "convert to discussion" button.
+  //   - bo0tzz `#NNN` closing comment (heuristic) — the manual workflow.
+  // In practice these are mutually exclusive (you don't comment `#NNN` on a
+  // converted issue), but if both fire, conversion wins.
+  use converted_to <- decode.then(converted_to_discussion_decoder())
+  use comment_ref <- decode.then(duplicate_of_decoder())
+  let duplicate_of_number = case converted_to {
+    option.Some(_) -> converted_to
+    option.None -> comment_ref
+  }
   decode.success(BackfillItem(item:, duplicate_of_number:))
+}
+
+fn converted_to_discussion_decoder() -> decode.Decoder(Option(Int)) {
+  let event_decoder = {
+    use number <- decode.optional_field(
+      "discussion",
+      option.None,
+      decode.optional(decode.at(["number"], decode.int)),
+    )
+    decode.success(number)
+  }
+  let nodes_decoder = {
+    use nodes <- decode.field("nodes", decode.list(event_decoder))
+    case nodes {
+      [first, ..] -> decode.success(first)
+      [] -> decode.success(option.None)
+    }
+  }
+  use timeline <- decode.optional_field(
+    "timelineItems",
+    option.None,
+    decode.optional(nodes_decoder),
+  )
+  decode.success(option.flatten(timeline))
 }
 
 // The dupe signal in the immich workflow is the most recent comment, by the
