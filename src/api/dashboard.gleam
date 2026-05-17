@@ -219,6 +219,8 @@ fn style_block() -> String {
     @media (prefers-color-scheme: dark) { .pair-arrow-same-author { color: #f6c873; } }
     .same-author-row { background: rgba(255, 200, 100, 0.08); }
     @media (prefers-color-scheme: dark) { .same-author-row { background: rgba(255, 200, 100, 0.04); } }
+    .deprioritized-row { opacity: 0.55; }
+    .deprioritized-row:hover { opacity: 1; }
     .similarity { font-variant-numeric: tabular-nums; font-weight: 600; }
     .kind { display: inline-block; font-size: 0.7em; padding: 0.1em 0.4em; border-radius: 3px; background: #ddd; color: #333; vertical-align: middle; margin-right: 0.3em; }
     .kind-discussion { background: #c8e6c9; }
@@ -359,9 +361,14 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
             False, _ ->
               "<div class=\"pair-arrow\">↓ maybe a duplicate of</div>"
           }
-          let row_class = case same_author {
-            True -> "<tr class=\"same-author-row\">"
-            False -> "<tr>"
+          // Deprioritized = "closed-with-non-dupe-reason vs open" — empirically
+          // 100% dismissal rate / 0% closure rate in the first triage session.
+          // Sink to the bottom and grey out so they're scannable but don't
+          // crowd out actionable pairs.
+          let row_class = case same_author, row.deprioritized {
+            _, True -> "<tr class=\"deprioritized-row\">"
+            True, _ -> "<tr class=\"same-author-row\">"
+            False, _ -> "<tr>"
           }
           let dismiss_btn =
             "<button class=\"dismiss\" title=\"dismiss as not a duplicate\""

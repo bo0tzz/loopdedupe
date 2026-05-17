@@ -13,9 +13,18 @@ import gleam/time/duration
 import gleam/time/timestamp.{type Timestamp}
 import squall
 
-// Hardcoded for now — the maintainer whose dupe-close comments we trust.
-// Should become a config setting once another maintainer joins the workflow.
-const dupe_comment_maintainer = "bo0tzz"
+// Comments by these authorAssociation values are treated as authoritative
+// for dupe-pointer extraction. OWNER/MEMBER/COLLABORATOR == "actual repo
+// maintainer", which is broader than hardcoding one login and avoids
+// missing closures by mmomjian, danieldietzler, alextran1502, etc. Drops
+// CONTRIBUTOR / NONE / FIRST_TIMER who post '#NNN' refs that often point
+// at related-but-not-canonical items.
+fn is_maintainer_association(assoc: String) -> Bool {
+  case assoc {
+    "OWNER" | "MEMBER" | "COLLABORATOR" -> True
+    _ -> False
+  }
+}
 
 pub fn new_client() {
   let token = config.get_env(config.GithubToken)
@@ -47,6 +56,7 @@ pub fn list_items(
               comments(last: 10) {
                   nodes {
                       author { login }
+                      authorAssociation
                       body
                       createdAt
                   }
@@ -178,20 +188,20 @@ fn duplicate_of_decoder(
   close_at: Option(Timestamp),
 ) -> decode.Decoder(Option(Int)) {
   let dupe_comment_decoder = {
-    use author_login <- decode.optional_field(
-      "author",
-      option.None,
-      decode.optional(decode.at(["login"], decode.string)),
+    use author_association <- decode.optional_field(
+      "authorAssociation",
+      "",
+      decode.string,
     )
     use created_at <- decode.field("createdAt", timestamp_decoder())
     use body <- decode.field("body", decode.string)
-    case author_login {
-      option.Some(login) if login == dupe_comment_maintainer ->
+    case is_maintainer_association(author_association) {
+      True ->
         case parse_dupe_ref(body) {
           option.Some(n) -> decode.success(option.Some(#(created_at, n)))
           option.None -> decode.success(option.None)
         }
-      _ -> decode.success(option.None)
+      False -> decode.success(option.None)
     }
   }
 
@@ -331,6 +341,7 @@ pub fn list_discussions(client: squall.Client, cursor: Option(String)) {
               comments(last: 10) {
                   nodes {
                       author { login }
+                      authorAssociation
                       body
                       createdAt
                   }

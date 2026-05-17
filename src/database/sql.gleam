@@ -281,6 +281,7 @@ pub type DashboardTopPairsRow {
     target_state_reason: Option(ItemStateReason),
     target_author: Option(String),
     target_original_id: Int,
+    deprioritized: Bool,
   )
 }
 
@@ -338,6 +339,7 @@ pub fn dashboard_top_pairs(
     )
     use target_author <- decode.field(15, decode.optional(decode.string))
     use target_original_id <- decode.field(16, decode.int)
+    use deprioritized <- decode.field(17, decode.bool)
     decode.success(DashboardTopPairsRow(
       similarity:,
       source_id:,
@@ -356,6 +358,7 @@ pub fn dashboard_top_pairs(
       target_state_reason:,
       target_author:,
       target_original_id:,
+      deprioritized:,
     ))
   }
 
@@ -438,7 +441,21 @@ resolved AS (
            tgt_info.author_login                                               AS target_author,
            e.target_item_id                                                    AS target_original_id,
            LEAST(src_can.canonical_id, tgt_can.canonical_id)                   AS pair_lo,
-           GREATEST(src_can.canonical_id, tgt_can.canonical_id)                AS pair_hi
+           GREATEST(src_can.canonical_id, tgt_can.canonical_id)                AS pair_hi,
+           -- Pairs where one side is closed for a non-dupe reason (completed,
+           -- resolved, outdated, not_planned) paired with an open side are
+           -- 'work happened elsewhere' artefacts, not actual dupes to close.
+           -- Measured at 100% dismissal rate / 0% closure rate on the first
+           -- triage session. Flag here so the renderer can sort them down.
+           (
+             (src_info.state = 'closed'
+               AND src_info.state_reason IN ('completed','resolved','outdated','not_planned')
+               AND tgt_info.state = 'open')
+             OR
+             (tgt_info.state = 'closed'
+               AND tgt_info.state_reason IN ('completed','resolved','outdated','not_planned')
+               AND src_info.state = 'open')
+           )                                                                   AS deprioritized
     FROM top_edges e
              JOIN canonical src_can ON src_can.orig_id = e.source_item_id
              JOIN canonical tgt_can ON tgt_can.orig_id = e.target_item_id
@@ -469,9 +486,13 @@ SELECT similarity,
        source_id, source_number, source_title, source_item_type,
        source_state, source_state_reason, source_author, source_original_id,
        target_id, target_number, target_title, target_item_type,
-       target_state, target_state_reason, target_author, target_original_id
+       target_state, target_state_reason, target_author, target_original_id,
+       deprioritized
 FROM deduped
-ORDER BY similarity DESC
+-- Deprioritized pairs (closed-non-dupe-reason vs open) sink to the bottom
+-- of the feed instead of being filtered entirely. Maintainer can still
+-- scroll to them if they want.
+ORDER BY deprioritized ASC, similarity DESC
 LIMIT $1;
 "
   |> pog.query
