@@ -176,7 +176,10 @@ type Candidate {
 }
 
 fn compute_and_cache(db: pog.Connection, item_id: Int) {
-  case sql.suggest_duplicates(db, item_id, 0.75) {
+  // Threshold 0.65 for voyage-4-large + input_type=document. Noise p95 is
+  // 0.68 so 0.65 sits just below — caught dupes get reranked, the
+  // borderline noise gets filtered out by the rerank's heavier model.
+  case sql.suggest_duplicates(db, item_id, 0.65) {
     Ok(pog.Returned(_, rows)) -> {
       let candidates = list.map(rows, suggest_row_to_candidate)
       let reranked = rerank_candidates(db, item_id, candidates)

@@ -105,7 +105,8 @@ pub fn handle_embeddings_job(
   // the body's actual prose is what we want to compare on.
   let embed_text = item.title <> "\n\n" <> strip.strip_template(item.body)
   use #(embedding, model) <- result.try(
-    voyage.embed(embed_text) |> result.map_error(map_snag_to_error),
+    voyage.embed(embed_text, model: voyage.Voyage4Large)
+    |> result.map_error(map_snag_to_error),
   )
 
   let model_name = voyage.embed_model_to_string(model)

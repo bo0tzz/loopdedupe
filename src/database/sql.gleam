@@ -38,10 +38,11 @@ WHERE github_id = $1;
 /// the limit despite scoring well above threshold. 200 keeps the storage
 /// bounded but recovers the long tail.
 /// 
-/// Threshold=0.65 (down from 0.7): Voyage's noise floor median is ~0.62,
-/// so 0.65 sits just above noise and catches the few real dupes scoring
-/// between 0.6 and 0.7. False-positive pairs at this level get filtered
-/// by the candidates-feed's "at least one open" / chain-resolution logic.
+/// Threshold=0.55: with voyage-4-large + input_type=document the random
+/// noise floor median is ~0.52, so 0.55 sits just above it and recovers
+/// the low-end tail of real dupes scoring 0.55-0.65. False-positive pairs
+/// at this level get filtered by the candidates-feed's "at least one
+/// open" / chain-resolution logic and the dashboard's 0.80 display floor.
 ///
 /// > 🐿️ This function was generated automatically using v4.6.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -59,10 +60,11 @@ pub fn compute_edges(
 -- the limit despite scoring well above threshold. 200 keeps the storage
 -- bounded but recovers the long tail.
 --
--- Threshold=0.65 (down from 0.7): Voyage's noise floor median is ~0.62,
--- so 0.65 sits just above noise and catches the few real dupes scoring
--- between 0.6 and 0.7. False-positive pairs at this level get filtered
--- by the candidates-feed's \"at least one open\" / chain-resolution logic.
+-- Threshold=0.55: with voyage-4-large + input_type=document the random
+-- noise floor median is ~0.52, so 0.55 sits just above it and recovers
+-- the low-end tail of real dupes scoring 0.55-0.65. False-positive pairs
+-- at this level get filtered by the candidates-feed's \"at least one
+-- open\" / chain-resolution logic and the dashboard's 0.80 display floor.
 WITH item_embedding AS (SELECT embedding
                         FROM item_embeddings
                         WHERE item_id = $1),
@@ -80,7 +82,7 @@ SELECT $1,
        similarity,
        'computed'
 FROM similar_items
-WHERE similarity >= 0.65
+WHERE similarity >= 0.55
 ON CONFLICT (source_item_id, target_item_id)
 DO UPDATE SET similarity = EXCLUDED.similarity, edge_type = EXCLUDED.edge_type
 "

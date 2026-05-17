@@ -15,12 +15,14 @@ import snag
 pub type EmbedModel {
   Voyage3Large
   Voyage35
+  Voyage4Large
 }
 
 pub fn embed_model_to_string(model: EmbedModel) -> String {
   case model {
     Voyage3Large -> "voyage-3-large"
     Voyage35 -> "voyage-3.5"
+    Voyage4Large -> "voyage-4-large"
   }
 }
 
@@ -29,6 +31,7 @@ fn embed_model_decoder() -> decode.Decoder(EmbedModel) {
   case variant {
     "voyage-3-large" -> decode.success(Voyage3Large)
     "voyage-3.5" -> decode.success(Voyage35)
+    "voyage-4-large" -> decode.success(Voyage4Large)
     _ -> decode.failure(Voyage3Large, "EmbedModel")
   }
 }
@@ -55,17 +58,23 @@ type EmbedRequest {
     model: EmbedModel,
     truncation: Bool,
     output_dimension: OutputDimension,
+    // Per Voyage docs, embedding quality improves on retrieval tasks when
+    // we tell the model what role the input plays. For symmetric dedup
+    // both sides are documents, so we pin to "document" — null/generic
+    // would give the model less signal.
+    input_type: String,
   )
 }
 
 fn embed_request_to_json(embed_request: EmbedRequest) -> json.Json {
-  let EmbedRequest(input:, model:, truncation:, output_dimension:) =
+  let EmbedRequest(input:, model:, truncation:, output_dimension:, input_type:) =
     embed_request
   json.object([
     #("input", json.array(input, json.string)),
     #("model", embed_model_to_json(model)),
     #("truncation", json.bool(truncation)),
     #("output_dimension", output_dimension_to_json(output_dimension)),
+    #("input_type", json.string(input_type)),
   ])
 }
 
@@ -187,13 +196,17 @@ pub fn rerank(
   })
 }
 
-pub fn embed(text: String) -> Result(#(List(Float), EmbedModel), snag.Snag) {
+pub fn embed(
+  text: String,
+  model model: EmbedModel,
+) -> Result(#(List(Float), EmbedModel), snag.Snag) {
   let request_body =
     EmbedRequest(
       input: [text],
-      model: Voyage3Large,
+      model: model,
       truncation: False,
       output_dimension: Dim2048,
+      input_type: "document",
     )
     |> embed_request_to_json
     |> json.to_string()
