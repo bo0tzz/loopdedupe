@@ -67,6 +67,7 @@ pub fn item_detail(ctx: Context, id: String) -> Response {
               item_header(it),
               "<h2>Similar candidates</h2>",
               candidates_table(candidates),
+              item_body(it),
             ])
           wisp.html_response(body, 200)
         }
@@ -101,10 +102,10 @@ fn style_block() -> String {
     .stat-value { font-size: 1.4em; font-weight: 600; }
     .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 2em; }
     @media (max-width: 900px) { .columns { grid-template-columns: 1fr; } }
-    table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-    th, td { text-align: left; padding: 0.4em 0.5em; border-bottom: 1px solid #eee; vertical-align: top; }
+    table { width: 100%; border-collapse: collapse; font-size: 1em; }
+    th, td { text-align: left; padding: 0.55em 0.6em; border-bottom: 1px solid #eee; vertical-align: top; }
     @media (prefers-color-scheme: dark) { th, td { border-color: #333; } }
-    th { font-weight: 600; opacity: 0.7; font-size: 0.85em; }
+    th { font-weight: 600; opacity: 0.7; font-size: 0.9em; }
     .pair { display: block; }
     .pair-candidate { font-weight: 600; }
     .pair-canonical { opacity: 0.85; }
@@ -327,17 +328,19 @@ fn recent_table(rows: List(sql.DashboardRecentItemsRow)) -> String {
 }
 
 fn item_header(it: github.Item) -> String {
-  "<p><a href=\""
-  <> escape(it.url)
-  <> "\" target=\"_blank\" rel=\"noreferrer\">View on GitHub →</a> · "
-  <> escape(format_date(it.created_at))
-  <> "</p><h2>#"
+  "<h2>#"
   <> int.to_string(it.number)
   <> " "
   <> escape(it.title)
-  <> "</h2><div class=\"item-body\">"
-  <> escape(it.body)
-  <> "</div>"
+  <> "</h2><p><a href=\""
+  <> escape(it.url)
+  <> "\" target=\"_blank\" rel=\"noreferrer\">View on GitHub →</a> · "
+  <> escape(format_date(it.created_at))
+  <> "</p>"
+}
+
+fn item_body(it: github.Item) -> String {
+  "<h2>Body</h2><div class=\"item-body\">" <> escape(it.body) <> "</div>"
 }
 
 fn candidates_table(items: List(github.SuggestedDuplicate)) -> String {
