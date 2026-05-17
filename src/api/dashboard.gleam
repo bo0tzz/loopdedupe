@@ -5,12 +5,13 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option}
+import gleam/result
 import gleam/string
 import gleam/time/duration
 import gleam/time/timestamp.{type Timestamp}
 import pog
 import types.{type Context}
-import wisp.{type Response}
+import wisp.{type Request, type Response}
 
 const top_pairs_limit = 50
 
@@ -49,6 +50,24 @@ pub fn stats_fragment(ctx: Context) -> Response {
     _ -> option.None
   }
   wisp.html_response(stats_block(stats), 200)
+}
+
+// htmx-driven dismissal. Maintainer clicks × on a pair, we insert a
+// 'not_duplicate' judgment, return empty body. The pair's <tr> has
+// hx-swap='delete' which removes the row visually. The dashboard query
+// filters out judged pairs so the dismissal sticks across reloads.
+pub fn dismiss_pair(req: Request, ctx: Context) -> Response {
+  let query = wisp.get_query(req)
+  let a = result.try(list.key_find(query, "a"), int.parse)
+  let b = result.try(list.key_find(query, "b"), int.parse)
+  case a, b {
+    Ok(a_id), Ok(b_id) ->
+      case sql.insert_judgment(ctx.db, a_id, b_id, sql.NotDuplicate) {
+        Ok(_) -> wisp.response(200) |> wisp.string_body("")
+        Error(_) -> wisp.internal_server_error()
+      }
+    _, _ -> wisp.bad_request("expected ?a=<id>&b=<id>")
+  }
 }
 
 pub fn item_detail(ctx: Context, id: String) -> Response {
@@ -120,6 +139,10 @@ fn style_block() -> String {
     .kind-discussion { background: #c8e6c9; }
     .resolution-hint { font-size: 0.75em; opacity: 0.6; font-style: italic; margin-left: 0.5em; }
     .author { font-size: 0.75em; opacity: 0.6; margin-left: 0.5em; font-variant: tabular-nums; }
+    .dismiss-cell { width: 2em; text-align: center; vertical-align: middle; }
+    .dismiss { background: transparent; border: 1px solid #ccc; border-radius: 3px; padding: 0.1em 0.45em; cursor: pointer; opacity: 0.4; color: inherit; font-size: 1.1em; line-height: 1; }
+    .dismiss:hover { opacity: 1; background: rgba(200, 50, 50, 0.1); border-color: rgba(200, 50, 50, 0.5); color: #c33; }
+    @media (prefers-color-scheme: dark) { .dismiss { border-color: #555; } .dismiss:hover { background: rgba(255, 100, 100, 0.15); border-color: #d77; color: #f88; } }
     .state-closed { opacity: 0.55; }
     .state-duplicate { text-decoration: line-through; opacity: 0.55; }
     .item-body { white-space: pre-wrap; background: #f6f6f6; padding: 1em; border-radius: 6px; }
@@ -227,7 +250,7 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
   case rows {
     [] -> "<p><em>No pairs yet. Run backfill to populate.</em></p>"
     _ ->
-      "<table><thead><tr><th>Sim</th><th>Pair</th></tr></thead><tbody>"
+      "<table><thead><tr><th>Sim</th><th>Pair</th><th></th></tr></thead><tbody>"
       <> {
         list.map(rows, fn(row) {
           let #(candidate, canonical, symmetric) = orient_pair(row)
@@ -247,6 +270,13 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
             True -> "<tr class=\"same-author-row\">"
             False -> "<tr>"
           }
+          let dismiss_btn =
+            "<button class=\"dismiss\" title=\"dismiss as not a duplicate\""
+            <> " hx-post=\"/api/judgments/not-duplicate?a="
+            <> int.to_string(candidate.id)
+            <> "&b="
+            <> int.to_string(canonical.id)
+            <> "\" hx-target=\"closest tr\" hx-swap=\"outerHTML swap:0.15s\">×</button>"
           row_class
           <> "<td class=\"similarity\">"
           <> format_similarity(row.similarity)
@@ -254,6 +284,8 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
           <> pair_side(candidate, "candidate")
           <> separator
           <> pair_side(canonical, "canonical")
+          <> "</td><td class=\"dismiss-cell\">"
+          <> dismiss_btn
           <> "</td></tr>"
         })
         |> string.concat()

@@ -452,6 +452,13 @@ resolved AS (
                       FROM item_duplicates d
                       WHERE (d.source_item_id = src_can.canonical_id AND d.target_item_id = tgt_can.canonical_id)
                          OR (d.source_item_id = tgt_can.canonical_id AND d.target_item_id = src_can.canonical_id))
+      -- Maintainer-dismissed pairs stay dismissed. Stored canonical-ordered
+      -- so we don't need an OR here — LEAST/GREATEST matches both directions.
+      AND NOT EXISTS (SELECT 1
+                      FROM pair_judgments j
+                      WHERE j.source_item_id = LEAST(src_can.canonical_id, tgt_can.canonical_id)
+                        AND j.target_item_id = GREATEST(src_can.canonical_id, tgt_can.canonical_id)
+                        AND j.verdict = 'not_duplicate')
 ),
 deduped AS (
     SELECT DISTINCT ON (pair_lo, pair_hi) *
@@ -565,6 +572,32 @@ pub fn has_rerank_cache(
 "
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Runs the `insert_judgment` query
+/// defined in `./src/database/sql/insert_judgment.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn insert_judgment(
+  db: pog.Connection,
+  arg_1: Int,
+  arg_2: Int,
+  arg_3: PairVerdict,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "INSERT INTO pair_judgments (source_item_id, target_item_id, verdict)
+VALUES (LEAST($1::bigint, $2::bigint), GREATEST($1::bigint, $2::bigint), $3)
+ON CONFLICT (source_item_id, target_item_id, verdict) DO NOTHING;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.int(arg_2))
+  |> pog.parameter(pair_verdict_encoder(arg_3))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -1126,6 +1159,20 @@ fn item_type_encoder(item_type) -> pog.Value {
   case item_type {
     Discussion -> "discussion"
     Issue -> "issue"
+  }
+  |> pog.text
+}/// Corresponds to the Postgres `pair_verdict` enum.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type PairVerdict {
+  NotDuplicate
+}
+
+fn pair_verdict_encoder(pair_verdict) -> pog.Value {
+  case pair_verdict {
+    NotDuplicate -> "not_duplicate"
   }
   |> pog.text
 }

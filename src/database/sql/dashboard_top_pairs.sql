@@ -91,6 +91,13 @@ resolved AS (
                       FROM item_duplicates d
                       WHERE (d.source_item_id = src_can.canonical_id AND d.target_item_id = tgt_can.canonical_id)
                          OR (d.source_item_id = tgt_can.canonical_id AND d.target_item_id = src_can.canonical_id))
+      -- Maintainer-dismissed pairs stay dismissed. Stored canonical-ordered
+      -- so we don't need an OR here — LEAST/GREATEST matches both directions.
+      AND NOT EXISTS (SELECT 1
+                      FROM pair_judgments j
+                      WHERE j.source_item_id = LEAST(src_can.canonical_id, tgt_can.canonical_id)
+                        AND j.target_item_id = GREATEST(src_can.canonical_id, tgt_can.canonical_id)
+                        AND j.verdict = 'not_duplicate')
 ),
 deduped AS (
     SELECT DISTINCT ON (pair_lo, pair_hi) *
