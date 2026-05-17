@@ -75,7 +75,7 @@ fn judgments_table(rows: List(sql.ListJudgmentsRow)) -> String {
   case rows {
     [] -> "<p><em>No dismissed pairs yet.</em></p>"
     _ ->
-      "<table><thead><tr><th>Dismissed</th><th>Pair</th></tr></thead><tbody>"
+      "<table><thead><tr><th>Dismissed</th><th>Pair</th><th></th></tr></thead><tbody>"
       <> {
         list.map(rows, fn(row) {
           let src =
@@ -100,12 +100,21 @@ fn judgments_table(rows: List(sql.ListJudgmentsRow)) -> String {
               author: row.target_author,
               resolved_via_chain: False,
             )
+          let undo_btn =
+            "<button class=\"undo\" title=\"undo dismissal\""
+            <> " hx-post=\"/api/judgments/undo?a="
+            <> int.to_string(src.id)
+            <> "&b="
+            <> int.to_string(tgt.id)
+            <> "\" hx-target=\"closest tr\" hx-swap=\"outerHTML swap:0.15s\">undo</button>"
           "<tr><td class=\"muted\">"
           <> escape(format_date(row.judged_at))
           <> "</td><td>"
           <> pair_side(src, "candidate")
           <> "<div class=\"pair-arrow\">↮ not a duplicate</div>"
           <> pair_side(tgt, "canonical")
+          <> "</td><td class=\"dismiss-cell\">"
+          <> undo_btn
           <> "</td></tr>"
         })
         |> string.concat()
@@ -121,6 +130,20 @@ pub fn dismiss_pair(req: Request, ctx: Context) -> Response {
   case a, b {
     Ok(a_id), Ok(b_id) ->
       case sql.insert_judgment(ctx.db, a_id, b_id, sql.NotDuplicate) {
+        Ok(_) -> wisp.response(200) |> wisp.string_body("")
+        Error(_) -> wisp.internal_server_error()
+      }
+    _, _ -> wisp.bad_request("expected ?a=<id>&b=<id>")
+  }
+}
+
+pub fn undo_pair_judgment(req: Request, ctx: Context) -> Response {
+  let query = wisp.get_query(req)
+  let a = result.try(list.key_find(query, "a"), int.parse)
+  let b = result.try(list.key_find(query, "b"), int.parse)
+  case a, b {
+    Ok(a_id), Ok(b_id) ->
+      case sql.delete_judgment(ctx.db, a_id, b_id, sql.NotDuplicate) {
         Ok(_) -> wisp.response(200) |> wisp.string_body("")
         Error(_) -> wisp.internal_server_error()
       }
@@ -202,7 +225,11 @@ fn style_block() -> String {
     .resolution-hint { font-size: 0.75em; opacity: 0.6; font-style: italic; margin-left: 0.5em; }
     .author { font-size: 0.75em; opacity: 0.6; margin-left: 0.5em; font-variant: tabular-nums; }
     .dismiss-cell { width: 2em; text-align: center; vertical-align: middle; }
-    .dismiss { background: transparent; border: 1px solid #ccc; border-radius: 3px; padding: 0.1em 0.45em; cursor: pointer; opacity: 0.4; color: inherit; font-size: 1.1em; line-height: 1; }
+    .dismiss, .undo { background: transparent; border: 1px solid #ccc; border-radius: 3px; padding: 0.1em 0.45em; cursor: pointer; opacity: 0.4; color: inherit; line-height: 1; }
+    .dismiss { font-size: 1.1em; }
+    .undo { font-size: 0.85em; }
+    .undo:hover { opacity: 1; background: rgba(50, 150, 50, 0.1); border-color: rgba(50, 150, 50, 0.5); color: #393; }
+    @media (prefers-color-scheme: dark) { .undo:hover { background: rgba(120, 220, 120, 0.15); border-color: #6d6; color: #8e8; } }
     .dismiss:hover { opacity: 1; background: rgba(200, 50, 50, 0.1); border-color: rgba(200, 50, 50, 0.5); color: #c33; }
     @media (prefers-color-scheme: dark) { .dismiss { border-color: #555; } .dismiss:hover { background: rgba(255, 100, 100, 0.15); border-color: #d77; color: #f88; } }
     .muted { opacity: 0.7; font-size: 0.9em; }

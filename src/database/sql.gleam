@@ -480,6 +480,33 @@ LIMIT $1;
   |> pog.execute(db)
 }
 
+/// Runs the `delete_judgment` query
+/// defined in `./src/database/sql/delete_judgment.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn delete_judgment(
+  db: pog.Connection,
+  arg_1: Int,
+  arg_2: Int,
+  arg_3: PairVerdict,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "DELETE FROM pair_judgments
+WHERE source_item_id = LEAST($1::bigint, $2::bigint)
+  AND target_item_id = GREATEST($1::bigint, $2::bigint)
+  AND verdict = $3;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.int(arg_2))
+  |> pog.parameter(pair_verdict_encoder(arg_3))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `get_rerank_cache` query
 /// defined in `./src/database/sql/get_rerank_cache.sql`.
 ///
