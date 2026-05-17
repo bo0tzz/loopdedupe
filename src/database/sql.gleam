@@ -441,6 +441,130 @@ LIMIT $1;
   |> pog.execute(db)
 }
 
+/// A row you get from running the `get_rerank_cache` query
+/// defined in `./src/database/sql/get_rerank_cache.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type GetRerankCacheRow {
+  GetRerankCacheRow(
+    target_item_id: Int,
+    relevance_score: Float,
+    title: String,
+    state: ItemState,
+    state_reason: Option(ItemStateReason),
+  )
+}
+
+/// Runs the `get_rerank_cache` query
+/// defined in `./src/database/sql/get_rerank_cache.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn get_rerank_cache(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(GetRerankCacheRow), pog.QueryError) {
+  let decoder = {
+    use target_item_id <- decode.field(0, decode.int)
+    use relevance_score <- decode.field(1, decode.float)
+    use title <- decode.field(2, decode.string)
+    use state <- decode.field(3, item_state_decoder())
+    use state_reason <- decode.field(
+      4,
+      decode.optional(item_state_reason_decoder()),
+    )
+    decode.success(GetRerankCacheRow(
+      target_item_id:,
+      relevance_score:,
+      title:,
+      state:,
+      state_reason:,
+    ))
+  }
+
+  "SELECT target_item_id,
+       relevance_score,
+       i.title,
+       i.state,
+       i.state_reason
+FROM item_rerank_cache c
+         JOIN items i ON i.github_id = c.target_item_id
+WHERE c.source_item_id = $1
+ORDER BY c.relevance_score DESC
+LIMIT 10;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// A row you get from running the `has_rerank_cache` query
+/// defined in `./src/database/sql/has_rerank_cache.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type HasRerankCacheRow {
+  HasRerankCacheRow(cached: Bool)
+}
+
+/// Runs the `has_rerank_cache` query
+/// defined in `./src/database/sql/has_rerank_cache.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn has_rerank_cache(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(HasRerankCacheRow), pog.QueryError) {
+  let decoder = {
+    use cached <- decode.field(0, decode.bool)
+    decode.success(HasRerankCacheRow(cached:))
+  }
+
+  "SELECT EXISTS (
+    SELECT 1 FROM item_rerank_cache WHERE source_item_id = $1
+) AS cached;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Runs the `insert_rerank_score` query
+/// defined in `./src/database/sql/insert_rerank_score.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn insert_rerank_score(
+  db: pog.Connection,
+  arg_1: Int,
+  arg_2: Int,
+  arg_3: Float,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "INSERT INTO item_rerank_cache (source_item_id, target_item_id, relevance_score)
+VALUES ($1, $2, $3)
+ON CONFLICT (source_item_id, target_item_id)
+DO UPDATE SET relevance_score = EXCLUDED.relevance_score,
+              computed_at     = now();
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.int(arg_2))
+  |> pog.parameter(pog.float(arg_3))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `list_items` query
 /// defined in `./src/database/sql/list_items.sql`.
 ///
@@ -609,6 +733,7 @@ pub type SuggestDuplicatesRow {
     target_item_id: Int,
     similarity: Float,
     title: String,
+    body: String,
     state: ItemState,
     state_reason: Option(ItemStateReason),
   )
@@ -629,15 +754,17 @@ pub fn suggest_duplicates(
     use target_item_id <- decode.field(0, decode.int)
     use similarity <- decode.field(1, decode.float)
     use title <- decode.field(2, decode.string)
-    use state <- decode.field(3, item_state_decoder())
+    use body <- decode.field(3, decode.string)
+    use state <- decode.field(4, item_state_decoder())
     use state_reason <- decode.field(
-      4,
+      5,
       decode.optional(item_state_reason_decoder()),
     )
     decode.success(SuggestDuplicatesRow(
       target_item_id:,
       similarity:,
       title:,
+      body:,
       state:,
       state_reason:,
     ))
@@ -660,12 +787,14 @@ SELECT
     ae.target_item_id,
     ae.similarity,
     i.title,
+    i.body,
     i.state,
     i.state_reason
 FROM all_edges ae
          JOIN items i ON i.github_id = ae.target_item_id
 ORDER BY ae.similarity DESC
-LIMIT 10;"
+LIMIT 50;
+"
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
   |> pog.parameter(pog.float(arg_2))

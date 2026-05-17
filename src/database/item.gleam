@@ -1,10 +1,13 @@
 import database/sql
+import embeddings/strip
+import embeddings/voyage
 import github/types
 import gleam/int
 import gleam/list
 import gleam/option.{type Option}
 import gleam/result
 import gleam/string
+import logging
 import pog
 import snag
 
@@ -120,27 +123,42 @@ pub fn select(
 }
 
 pub fn suggest_duplicates(db: pog.Connection, item_id: Int) {
-  // Tuned against 1917 ground-truth dupe pairs captured from maintainer
-  // close-comments and convert-to-discussion events:
-  //   threshold 0.85 → 56.7% of real dupes surfaced
-  //   threshold 0.75 → 94.1% of real dupes surfaced
-  // Noise floor's 99th percentile is 0.78 so 0.75 sits just below it; the
-  // per-item drill-in is a triage surface where recall beats precision
-  // since the maintainer is going to read each candidate anyway.
-  case sql.suggest_duplicates(db, item_id, 0.75) {
+  // Two-stage retrieval with lazy cache:
+  //   1. If item_rerank_cache has rows for this source, serve from there.
+  //   2. Otherwise: pull the top-50 cosine candidates (threshold 0.75 —
+  //      tuned for ~94% recall on ground-truth dupes), ask Voyage
+  //      rerank-2.5 to rescore them with the full text, store the scores
+  //      in the cache, and return the top 10.
+  //
+  // Cosine on Voyage-3-large gets the right ballpark cheaply; rerank
+  // catches the cases where vector similarity ranks two structurally
+  // similar but semantically different reports too closely. The cache
+  // means a maintainer drilling into the same issue twice pays the
+  // Voyage roundtrip exactly once.
+  case sql.has_rerank_cache(db, item_id) {
+    Ok(pog.Returned(_, [row])) ->
+      case row.cached {
+        True -> read_from_cache(db, item_id)
+        False -> compute_and_cache(db, item_id)
+      }
+    _ -> compute_and_cache(db, item_id)
+  }
+}
+
+fn read_from_cache(db: pog.Connection, item_id: Int) {
+  case sql.get_rerank_cache(db, item_id) {
     Ok(pog.Returned(_, rows)) -> {
-      //TODO: Resolve canonical/root items in query
       let items =
         list.map(rows, fn(row) {
-          let sql.SuggestDuplicatesRow(
+          let sql.GetRerankCacheRow(
             target_item_id:,
-            similarity:,
+            relevance_score:,
             title:,
             state:,
             state_reason:,
           ) = row
           types.SuggestedDuplicate(
-            similarity:,
+            similarity: relevance_score,
             title:,
             github_id: target_item_id,
             state: sql_into_state(state),
@@ -151,6 +169,121 @@ pub fn suggest_duplicates(db: pog.Connection, item_id: Int) {
     }
     Error(e) -> Error(e)
   }
+}
+
+type Candidate {
+  Candidate(suggested: types.SuggestedDuplicate, body: String)
+}
+
+fn compute_and_cache(db: pog.Connection, item_id: Int) {
+  case sql.suggest_duplicates(db, item_id, 0.75) {
+    Ok(pog.Returned(_, rows)) -> {
+      let candidates = list.map(rows, suggest_row_to_candidate)
+      let reranked = rerank_candidates(db, item_id, candidates)
+      // Persist the full reranked list so subsequent drill-ins are instant.
+      // Failures here aren't fatal — the user got their result, we just
+      // didn't manage to cache it for next time.
+      list.each(reranked, fn(s) {
+        case sql.insert_rerank_score(db, item_id, s.github_id, s.similarity) {
+          Ok(_) -> Nil
+          Error(e) ->
+            logging.log(
+              logging.Warning,
+              "failed to cache rerank score: " <> string.inspect(e),
+            )
+        }
+      })
+      Ok(types.SuggestedDuplicates(items: list.take(reranked, 10)))
+    }
+    Error(e) -> Error(e)
+  }
+}
+
+fn suggest_row_to_candidate(row: sql.SuggestDuplicatesRow) -> Candidate {
+  let sql.SuggestDuplicatesRow(
+    target_item_id:,
+    similarity:,
+    title:,
+    body:,
+    state:,
+    state_reason:,
+  ) = row
+  Candidate(
+    suggested: types.SuggestedDuplicate(
+      similarity:,
+      title:,
+      github_id: target_item_id,
+      state: sql_into_state(state),
+      state_reason: sql_into_state_reason(state_reason),
+    ),
+    body: body,
+  )
+}
+
+fn rerank_candidates(
+  db: pog.Connection,
+  item_id: Int,
+  candidates: List(Candidate),
+) -> List(types.SuggestedDuplicate) {
+  case candidates {
+    [] -> []
+    [single] -> [single.suggested]
+    _ -> {
+      case sql.select_item(db, item_id) {
+        Ok(pog.Returned(1, [source])) -> {
+          let query_text = build_text(source.title, source.body)
+          let docs =
+            list.map(candidates, fn(c) {
+              build_text(c.suggested.title, c.body)
+            })
+          case voyage.rerank(query_text, docs) {
+            Ok(scored) -> apply_rerank(candidates, scored)
+            Error(e) -> {
+              logging.log(
+                logging.Warning,
+                "rerank fell back to cosine: " <> snag.line_print(e),
+              )
+              list.map(candidates, fn(c) { c.suggested })
+            }
+          }
+        }
+        _ -> list.map(candidates, fn(c) { c.suggested })
+      }
+    }
+  }
+}
+
+fn build_text(title: String, body: String) -> String {
+  title <> "\n\n" <> strip.strip_template(body)
+}
+
+fn apply_rerank(
+  candidates: List(Candidate),
+  scored: List(voyage.RerankResult),
+) -> List(types.SuggestedDuplicate) {
+  let indexed = list.index_map(candidates, fn(c, i) { #(i, c) })
+  let by_index = fn(i: Int) {
+    list.find_map(indexed, fn(p) {
+      case p.0 == i {
+        True -> {
+          // Replace the cosine score with the rerank score so the cache
+          // (and downstream callers) display rerank relevance.
+          let updated =
+            types.SuggestedDuplicate(..p.1.suggested, similarity: 0.0)
+          Ok(updated)
+        }
+        False -> Error(Nil)
+      }
+    })
+  }
+  list.index_map(scored, fn(r, _) { r })
+  |> list.filter_map(fn(r) {
+    case by_index(r.index) {
+      Ok(s) ->
+        Ok(types.SuggestedDuplicate(..s, similarity: r.score))
+      Error(_) -> Error(Nil)
+    }
+  })
 }
 
 fn map_item(

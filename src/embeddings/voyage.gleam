@@ -121,6 +121,72 @@ fn expect_json_response(
   }
 }
 
+// --- rerank ----------------------------------------------------------------
+//
+// Two-stage retrieval pattern: get top-N candidates by embedding cosine,
+// then rerank with the actual texts via a heavier model. Cosine on
+// voyage-3-large is fast and ~good; rerank-2.5 reads the full content and
+// rescores for semantic relevance, fixing the cases where two items have
+// similar embedding vectors but represent different concerns.
+
+pub type RerankResult {
+  RerankResult(index: Int, score: Float)
+}
+
+fn rerank_request_body(query: String, documents: List(String)) -> String {
+  json.object([
+    #("query", json.string(query)),
+    #("documents", json.array(documents, json.string)),
+    #("model", json.string("rerank-2.5")),
+    // Voyage truncates per-doc when the request exceeds context — we'd
+    // rather have a slightly truncated rerank than a 400.
+    #("truncation", json.bool(True)),
+  ])
+  |> json.to_string()
+}
+
+fn rerank_response_decoder() -> decode.Decoder(List(RerankResult)) {
+  let result_decoder = {
+    use index <- decode.field("index", decode.int)
+    use score <- decode.field("relevance_score", decode.float)
+    decode.success(RerankResult(index:, score:))
+  }
+  use data <- decode.field("data", decode.list(result_decoder))
+  decode.success(data)
+}
+
+pub fn rerank(
+  query: String,
+  documents: List(String),
+) -> Result(List(RerankResult), snag.Snag) {
+  let request_body = rerank_request_body(query, documents)
+  let key = config.get_env(config.VoyageApiKey)
+
+  use base_req <- result.try(
+    request.to("https://api.voyageai.com/v1/rerank")
+    |> result.map_error(fn(_) { snag.new("failed to create rerank request") }),
+  )
+  let req =
+    request.set_method(base_req, http.Post)
+    |> request.set_header("authorization", "bearer " <> key)
+    |> request.set_header("content-type", "application/json")
+    |> request.set_body(request_body)
+
+  use resp <- result.try(httpc.send(req) |> snag.map_error(string.inspect))
+  use <- bool.lazy_guard(resp.status != 200, fn() {
+    snag.error(
+      "rerank: expected 200 but got "
+      <> int.to_string(resp.status)
+      <> ": "
+      <> resp.body,
+    )
+  })
+  json.parse(resp.body, rerank_response_decoder())
+  |> result.map_error(fn(e) {
+    snag.new("rerank: decode failed: " <> string.inspect(e))
+  })
+}
+
 pub fn embed(text: String) -> Result(#(List(Float), EmbedModel), snag.Snag) {
   let request_body =
     EmbedRequest(

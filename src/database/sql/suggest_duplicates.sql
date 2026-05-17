@@ -15,9 +15,10 @@ SELECT
     ae.target_item_id,
     ae.similarity,
     i.title,
+    i.body,
     i.state,
     i.state_reason
 FROM all_edges ae
          JOIN items i ON i.github_id = ae.target_item_id
 ORDER BY ae.similarity DESC
-LIMIT 10;
+LIMIT 50;
