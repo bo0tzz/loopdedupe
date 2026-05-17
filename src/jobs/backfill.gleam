@@ -15,13 +15,21 @@ import pog
 import types.{type Context}
 
 pub type BackfillJob {
-  BackfillJob(cursor: option.Option(String))
+  // `since` is an ISO-8601 datetime forwarded to GitHub's `filterBy.since`
+  // — only issues updated at-or-after that timestamp come back. None means
+  // a full corpus walk. Preserved across the pagination chain so the
+  // incremental boundary doesn't shift mid-run.
+  BackfillJob(cursor: option.Option(String), since: option.Option(String))
 }
 
 fn backfill_job_to_json(backfill_job: BackfillJob) -> json.Json {
-  let BackfillJob(cursor:) = backfill_job
+  let BackfillJob(cursor:, since:) = backfill_job
   json.object([
     #("cursor", case cursor {
+      option.None -> json.null()
+      option.Some(value) -> json.string(value)
+    }),
+    #("since", case since {
       option.None -> json.null()
       option.Some(value) -> json.string(value)
     }),
@@ -30,7 +38,12 @@ fn backfill_job_to_json(backfill_job: BackfillJob) -> json.Json {
 
 fn backfill_job_decoder() -> decode.Decoder(BackfillJob) {
   use cursor <- decode.field("cursor", decode.optional(decode.string))
-  decode.success(BackfillJob(cursor:))
+  use since <- decode.optional_field(
+    "since",
+    option.None,
+    decode.optional(decode.string),
+  )
+  decode.success(BackfillJob(cursor:, since:))
 }
 
 pub opaque type BackfillJobError {
@@ -84,7 +97,7 @@ pub fn handle_backfill_job(
   use <- logs.log_errors()
 
   use items <- result.try(
-    graphql.list_items(ctx.github_client, backfill_job.cursor)
+    graphql.list_items(ctx.github_client, backfill_job.cursor, backfill_job.since)
     |> result.map_error(map_string_to_error),
   )
   // Persist the issue rows and their duplicate-of pointers atomically. Job
@@ -132,7 +145,7 @@ pub fn handle_backfill_job(
     option.None -> Ok("backfilled")
     option.Some(cursor) -> {
       use _ <- result.try(
-        enqueue(ctx, option.Some(cursor))
+        enqueue(ctx, option.Some(cursor), backfill_job.since)
         |> result.map_error(map_error),
       )
       Ok("backfilled")
@@ -140,17 +153,22 @@ pub fn handle_backfill_job(
   }
 }
 
-pub fn enqueue(ctx: Context, cursor: option.Option(String)) {
-  enqueue_with_conn(ctx.db, ctx, cursor)
+pub fn enqueue(
+  ctx: Context,
+  cursor: option.Option(String),
+  since: option.Option(String),
+) {
+  enqueue_with_conn(ctx.db, ctx, cursor, since)
 }
 
 pub fn enqueue_with_conn(
   conn: pog.Connection,
   ctx: Context,
   cursor: option.Option(String),
+  since: option.Option(String),
 ) {
   let job =
-    m25.new_job(BackfillJob(cursor:))
+    m25.new_job(BackfillJob(cursor:, since:))
     |> m25.retry(3, option.Some(duration.seconds(30)))
   m25.enqueue(conn, queue_spec(ctx), job)
 }

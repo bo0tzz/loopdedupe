@@ -16,9 +16,11 @@ import gleam/dynamic/decode
 import gleam/json
 import gleam/list
 import gleam/option
+import gleam/order
 import gleam/result
 import gleam/string
 import gleam/time/duration
+import gleam/time/timestamp
 import jobs/embeddings
 import logs
 import m25
@@ -26,13 +28,24 @@ import pog
 import types.{type Context}
 
 pub type DiscussionBackfillJob {
-  DiscussionBackfillJob(cursor: option.Option(String))
+  // `since` is an ISO-8601 datetime; pages are walked newest-first and the
+  // chain stops as soon as a page contains an item older than this. None
+  // means walk the whole category. Discussions have no GraphQL
+  // filterBy.since, so we sort + early-stop instead.
+  DiscussionBackfillJob(
+    cursor: option.Option(String),
+    since: option.Option(String),
+  )
 }
 
 fn job_to_json(job: DiscussionBackfillJob) -> json.Json {
-  let DiscussionBackfillJob(cursor:) = job
+  let DiscussionBackfillJob(cursor:, since:) = job
   json.object([
     #("cursor", case cursor {
+      option.None -> json.null()
+      option.Some(value) -> json.string(value)
+    }),
+    #("since", case since {
       option.None -> json.null()
       option.Some(value) -> json.string(value)
     }),
@@ -41,7 +54,12 @@ fn job_to_json(job: DiscussionBackfillJob) -> json.Json {
 
 fn job_decoder() -> decode.Decoder(DiscussionBackfillJob) {
   use cursor <- decode.field("cursor", decode.optional(decode.string))
-  decode.success(DiscussionBackfillJob(cursor:))
+  use since <- decode.optional_field(
+    "since",
+    option.None,
+    decode.optional(decode.string),
+  )
+  decode.success(DiscussionBackfillJob(cursor:, since:))
 }
 
 pub opaque type DiscussionBackfillError {
@@ -132,12 +150,19 @@ pub fn handle_job(
     |> result.map_error(map_error),
   )
 
-  case page.page_info.cursor {
-    option.Some("") -> Ok("backfilled")
-    option.None -> Ok("backfilled")
-    option.Some(cursor) -> {
+  // Early-stop when an incremental walk crosses its boundary. The
+  // discussions query is ordered UPDATED_AT DESC, so if any item in this
+  // page is older than `since`, every subsequent page is older too — no
+  // point chaining further.
+  let crossed_boundary = page_crossed_boundary(page.items, job.since)
+
+  case crossed_boundary, page.page_info.cursor {
+    True, _ -> Ok("backfilled")
+    _, option.Some("") -> Ok("backfilled")
+    _, option.None -> Ok("backfilled")
+    _, option.Some(cursor) -> {
       use _ <- result.try(
-        enqueue(ctx, option.Some(cursor))
+        enqueue(ctx, option.Some(cursor), job.since)
         |> result.map_error(map_error),
       )
       Ok("backfilled")
@@ -145,17 +170,45 @@ pub fn handle_job(
   }
 }
 
-pub fn enqueue(ctx: Context, cursor: option.Option(String)) {
-  enqueue_with_conn(ctx.db, ctx, cursor)
+pub fn enqueue(
+  ctx: Context,
+  cursor: option.Option(String),
+  since: option.Option(String),
+) {
+  enqueue_with_conn(ctx.db, ctx, cursor, since)
 }
 
 pub fn enqueue_with_conn(
   conn: pog.Connection,
   ctx: Context,
   cursor: option.Option(String),
+  since: option.Option(String),
 ) {
   let job =
-    m25.new_job(DiscussionBackfillJob(cursor:))
+    m25.new_job(DiscussionBackfillJob(cursor:, since:))
     |> m25.retry(3, option.Some(duration.seconds(30)))
   m25.enqueue(conn, queue_spec(ctx), job)
+}
+
+// True if any item in `items` is older than `since`. Returns False when
+// `since` is None (a full walk has no boundary).
+fn page_crossed_boundary(
+  items: List(graphql.BackfillItem),
+  since: option.Option(String),
+) -> Bool {
+  case since {
+    option.None -> False
+    option.Some(iso) ->
+      case timestamp.parse_rfc3339(iso) {
+        Ok(boundary) ->
+          list.any(items, fn(bi) {
+            // updated_at < boundary → we've gone past where we need to look
+            case timestamp.compare(bi.item.updated_at, boundary) {
+              order.Lt -> True
+              _ -> False
+            }
+          })
+        Error(_) -> False
+      }
+  }
 }

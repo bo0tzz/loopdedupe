@@ -597,6 +597,72 @@ DO UPDATE SET relevance_score = EXCLUDED.relevance_score,
   |> pog.execute(db)
 }
 
+/// A row you get from running the `latest_discussion_update` query
+/// defined in `./src/database/sql/latest_discussion_update.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type LatestDiscussionUpdateRow {
+  LatestDiscussionUpdateRow(latest: Timestamp)
+}
+
+/// Runs the `latest_discussion_update` query
+/// defined in `./src/database/sql/latest_discussion_update.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn latest_discussion_update(
+  db: pog.Connection,
+) -> Result(pog.Returned(LatestDiscussionUpdateRow), pog.QueryError) {
+  let decoder = {
+    use latest <- decode.field(0, pog.timestamp_decoder())
+    decode.success(LatestDiscussionUpdateRow(latest:))
+  }
+
+  "SELECT MAX(github_updated_at) AS latest
+FROM items
+WHERE item_type = 'discussion';
+"
+  |> pog.query
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// A row you get from running the `latest_issue_update` query
+/// defined in `./src/database/sql/latest_issue_update.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type LatestIssueUpdateRow {
+  LatestIssueUpdateRow(latest: Timestamp)
+}
+
+/// Runs the `latest_issue_update` query
+/// defined in `./src/database/sql/latest_issue_update.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn latest_issue_update(
+  db: pog.Connection,
+) -> Result(pog.Returned(LatestIssueUpdateRow), pog.QueryError) {
+  let decoder = {
+    use latest <- decode.field(0, pog.timestamp_decoder())
+    decode.success(LatestIssueUpdateRow(latest:))
+  }
+
+  "SELECT MAX(github_updated_at) AS latest
+FROM items
+WHERE item_type = 'issue';
+"
+  |> pog.query
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `list_items` query
 /// defined in `./src/database/sql/list_items.sql`.
 ///

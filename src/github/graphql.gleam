@@ -22,12 +22,16 @@ pub fn new_client() {
   squall.new_with_auth("https://api.github.com/graphql", token)
 }
 
-pub fn list_items(client: squall.Client, cursor: Option(String)) {
+pub fn list_items(
+  client: squall.Client,
+  cursor: Option(String),
+  since: Option(String),
+) {
   let query =
     "
-    query ListItems($cursor: String) {
+    query ListItems($cursor: String, $since: DateTime) {
       repository(owner: \"immich-app\", name: \"immich\") {
-        issues(first: 100, after: $cursor) {
+        issues(first: 100, after: $cursor, filterBy: { since: $since }) {
           nodes {
               databaseId
               number
@@ -66,7 +70,10 @@ pub fn list_items(client: squall.Client, cursor: Option(String)) {
     squall.prepare_request(
       client,
       query,
-      json.object([#("cursor", json.nullable(cursor, json.string))]),
+      json.object([
+        #("cursor", json.nullable(cursor, json.string)),
+        #("since", json.nullable(since, json.string)),
+      ]),
     )
 
   let assert Ok(response) = httpc.send(request)
@@ -295,11 +302,20 @@ fn trim_trailing_period(s: String) -> String {
 const feature_request_category_id = "DIC_kwDOGyI-8M4CUEPD"
 
 pub fn list_discussions(client: squall.Client, cursor: Option(String)) {
+  // Always order newest-first by updatedAt so callers doing an incremental
+  // walk can stop the chain as soon as a page contains items older than
+  // their boundary. (Discussions don't have GitHub's filterBy.since, so
+  // sort + early-stop is the equivalent.)
   let query =
     "
     query ListDiscussions($cursor: String, $category: ID!) {
       repository(owner: \"immich-app\", name: \"immich\") {
-        discussions(first: 100, after: $cursor, categoryId: $category) {
+        discussions(
+          first: 100,
+          after: $cursor,
+          categoryId: $category,
+          orderBy: { field: UPDATED_AT, direction: DESC }
+        ) {
           nodes {
               databaseId
               number
