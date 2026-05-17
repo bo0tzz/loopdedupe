@@ -1,5 +1,5 @@
 [env]
-DATABASE_URL="postgres://postgres:loopdedupedev@localhost:5432/postgres"
+DATABASE_URL="postgres://postgres:loopdedupedev@localhost:15432/postgres"
 ENVIRONMENT="dev"
 _.file = 'secret.env'
 

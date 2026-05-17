@@ -1,7 +1,7 @@
 import database/embeddings
 import database/item
-import embeddings/local
 import embeddings/strip
+import embeddings/voyage
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -60,7 +60,10 @@ fn embeddings_job_decoder() -> decode.Decoder(EmbeddingsJob) {
 pub fn queue_spec(conn: pog.Connection) {
   m25.Queue(
     name: "embeddings",
-    max_concurrency: 4,
+    // Tier-1 Voyage has 2000 RPM headroom; even at ~500ms latency per
+    // request, 8 concurrent workers stays well under (~960 RPM ceiling).
+    // Bump if the queue isn't draining fast enough and there's no 429.
+    max_concurrency: 8,
     input_to_json: embeddings_job_to_json,
     input_decoder: embeddings_job_decoder(),
     output_to_json: json.string,
@@ -97,12 +100,15 @@ pub fn handle_embeddings_job(
   //     issue template makes most bodies look ~85% identical at the token
   //     level ('### Reproduction steps', version stacks, etc.). Stripping
   //     the template scaffolding recovers most of the body's real signal.
-  let embed_text = item.title <> "\n\n" <> strip.strip_template(item.body) <> "</s>"
+  // Voyage handles its own input formatting internally, but stripping the
+  // template noise is still worth it — less to embed, less prompt cost, and
+  // the body's actual prose is what we want to compare on.
+  let embed_text = item.title <> "\n\n" <> strip.strip_template(item.body)
   use #(embedding, model) <- result.try(
-    local.embed(embed_text) |> result.map_error(map_snag_to_error),
+    voyage.embed(embed_text) |> result.map_error(map_snag_to_error),
   )
 
-  let model_name = local.embed_model_to_string(model)
+  let model_name = voyage.embed_model_to_string(model)
 
   use pog.Returned(rows, _) <- result.try(
     embeddings.insert_embedding(conn, item.github_id, embedding, model_name)
