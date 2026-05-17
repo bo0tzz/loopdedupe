@@ -74,6 +74,10 @@ CREATE TABLE item_similarity_edges
 );
 
 CREATE INDEX ON item_similarity_edges (target_item_id);
+-- Partial index over high-similarity edges only — the dashboard's top-N
+-- query filters by similarity >= 0.80 first and benefits from an ordered
+-- scan there. The rest of the table is rarely queried by ORDER BY similarity.
+CREATE INDEX ON item_similarity_edges (similarity DESC) WHERE similarity >= 0.80;
 
 CREATE TABLE item_duplicates
 (
