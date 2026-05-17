@@ -1,5 +1,5 @@
 import cigogne
-import cigogne/config
+import cigogne/config as cig_config
 import config as env
 import gleam/option
 import gleam/otp/actor.{Started}
@@ -31,10 +31,10 @@ pub fn supervised(
 
 pub fn migrate(conn: pog.Connection) {
   let cfg =
-    config.Config(
-      config.ConnectionDbConfig(conn),
-      config.default_mig_table_config,
-      config.MigrationsConfig("loopdedupe", option.None, [], option.None),
+    cig_config.Config(
+      cig_config.ConnectionDbConfig(conn),
+      cig_config.default_mig_table_config,
+      cig_config.MigrationsConfig("loopdedupe", option.None, [], option.None),
     )
   use engine <- result.try(cigogne.create_engine(cfg))
   cigogne.apply_all(engine)
