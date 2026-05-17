@@ -110,6 +110,10 @@ fn style_block() -> String {
     .pair-canonical { opacity: 0.85; }
     .pair-arrow { font-size: 0.75em; opacity: 0.55; margin: 0.15em 0 0.15em 0.5em; font-style: italic; }
     .pair-arrow-sym { opacity: 0.45; }
+    .pair-arrow-same-author { color: #b5651d; opacity: 1; font-style: normal; font-weight: 600; }
+    @media (prefers-color-scheme: dark) { .pair-arrow-same-author { color: #f6c873; } }
+    .same-author-row { background: rgba(255, 200, 100, 0.08); }
+    @media (prefers-color-scheme: dark) { .same-author-row { background: rgba(255, 200, 100, 0.04); } }
     .similarity { font-variant-numeric: tabular-nums; font-weight: 600; }
     .kind { display: inline-block; font-size: 0.7em; padding: 0.1em 0.4em; border-radius: 3px; background: #ddd; color: #333; vertical-align: middle; margin-right: 0.3em; }
     .kind-discussion { background: #c8e6c9; }
@@ -226,13 +230,24 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
       <> {
         list.map(rows, fn(row) {
           let #(candidate, canonical, symmetric) = orient_pair(row)
-          let separator = case symmetric {
-            True ->
+          let same_author = same_author(candidate.author, canonical.author)
+          let separator = case symmetric, same_author {
+            // Same-author pairs are ~100x more likely to be real duplicates
+            // than random pairs (14.8% vs 0.15% in our ground-truth set).
+            // Worth flagging visually so the maintainer can prioritize them.
+            _, True ->
+              "<div class=\"pair-arrow pair-arrow-same-author\">↻ same author — probably a refiling</div>"
+            True, _ ->
               "<div class=\"pair-arrow pair-arrow-sym\">↔ either could be the canonical</div>"
-            False ->
+            False, _ ->
               "<div class=\"pair-arrow\">↓ maybe a duplicate of</div>"
           }
-          "<tr><td class=\"similarity\">"
+          let row_class = case same_author {
+            True -> "<tr class=\"same-author-row\">"
+            False -> "<tr>"
+          }
+          row_class
+          <> "<td class=\"similarity\">"
           <> format_similarity(row.similarity)
           <> "</td><td>"
           <> pair_side(candidate, "candidate")
@@ -243,6 +258,13 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
         |> string.concat()
       }
       <> "</tbody></table>"
+  }
+}
+
+fn same_author(a: Option(String), b: Option(String)) -> Bool {
+  case a, b {
+    option.Some(x), option.Some(y) -> x == y
+    _, _ -> False
   }
 }
 
