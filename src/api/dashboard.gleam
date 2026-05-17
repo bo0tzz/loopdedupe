@@ -243,8 +243,12 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
 }
 
 fn pair_side(side: PairSide, role: String) -> String {
+  // The previous wording was "resolved canonical" which clashed with the
+  // canonical/candidate role labels. This says the same thing — that an
+  // edge endpoint was walked through items.duplicate_of_number to land
+  // here — without overloading the role vocabulary.
   let resolution_hint = case side.resolved_via_chain {
-    True -> " <span class=\"resolution-hint\">↪ resolved canonical</span>"
+    True -> " <span class=\"resolution-hint\">↪ via dupe chain</span>"
     False -> ""
   }
   "<a class=\"pair pair-"
@@ -290,7 +294,7 @@ fn recent_table(rows: List(sql.DashboardRecentItemsRow)) -> String {
   }
 }
 
-fn item_header(it: github.Issue) -> String {
+fn item_header(it: github.Item) -> String {
   "<p><a href=\""
   <> escape(it.url)
   <> "\" target=\"_blank\" rel=\"noreferrer\">View on GitHub →</a> · "

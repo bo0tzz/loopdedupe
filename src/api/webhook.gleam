@@ -1,5 +1,6 @@
 import api/middleware
 import database/item
+import database/sql
 import github/types as github
 import gleam/http.{Post}
 import gleam/json
@@ -29,8 +30,9 @@ fn parse_and_upsert_webhook(body: String, ctx: Context) {
     |> snag.map_error(string.inspect),
   )
   use _ <- result.try(
-    item.upsert(ctx.db, webhook.issue) |> snag.map_error(string.inspect),
+    item.upsert(ctx.db, sql.Issue, webhook.item)
+    |> snag.map_error(string.inspect),
   )
-  embeddings.enqueue(ctx.db, webhook.issue.github_id)
+  embeddings.enqueue(ctx.db, webhook.item.github_id)
   |> snag.map_error(string.inspect)
 }

@@ -5,6 +5,7 @@ import config
 import gleam/http.{Get, Post}
 import gleam/option
 import jobs/backfill
+import jobs/discussion_backfill
 import mist
 import types.{type Context}
 import wisp.{type Request, type Response}
@@ -30,6 +31,7 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
     Get, ["api", "items", id] -> items.get(ctx, id)
     Get, ["api", "items", id, "similar"] -> items.get_similar(ctx, id)
     Post, ["api", "backfill"] -> start_backfill(ctx)
+    Post, ["api", "backfill", "discussions"] -> start_discussion_backfill(ctx)
     Get, [] -> dashboard.index(ctx)
     Get, ["dashboard", "stats"] -> dashboard.stats_fragment(ctx)
     Get, ["items", id] -> dashboard.item_detail(ctx, id)
@@ -40,6 +42,14 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
 fn start_backfill(ctx: Context) -> Response {
   case backfill.enqueue(ctx, option.None) {
     Ok(_) -> wisp.response(200) |> wisp.string_body("backfill started")
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn start_discussion_backfill(ctx: Context) -> Response {
+  case discussion_backfill.enqueue(ctx, option.None) {
+    Ok(_) ->
+      wisp.response(200) |> wisp.string_body("discussion backfill started")
     Error(_) -> wisp.internal_server_error()
   }
 }

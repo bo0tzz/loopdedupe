@@ -59,8 +59,8 @@ fn item_state_reason_decoder() -> decode.Decoder(ItemStateReason) {
   }
 }
 
-pub type Issue {
-  Issue(
+pub type Item {
+  Item(
     github_id: Int,
     number: Int,
     title: String,
@@ -77,8 +77,8 @@ fn timestamp_to_json(t: Timestamp) -> json.Json {
   timestamp.to_rfc3339(t, duration.seconds(0)) |> json.string
 }
 
-pub fn issue_to_json(issue: Issue) -> json.Json {
-  let Issue(
+pub fn item_to_json(item: Item) -> json.Json {
+  let Item(
     github_id:,
     number:,
     title:,
@@ -88,7 +88,7 @@ pub fn issue_to_json(issue: Issue) -> json.Json {
     url:,
     created_at:,
     updated_at:,
-  ) = issue
+  ) = item
   json.object([
     #("github_id", json.int(github_id)),
     #("number", json.int(number)),
@@ -147,7 +147,7 @@ pub fn issue_decoder() {
     ])
   use updated_at <- decode.then(updated_at_decoder)
 
-  decode.success(Issue(
+  decode.success(Item(
     github_id:,
     number:,
     title:,
@@ -160,15 +160,50 @@ pub fn issue_decoder() {
   ))
 }
 
+// Discussion's GraphQL shape differs from Issue: there's no `state` string,
+// just a `closed` boolean. Everything else lines up so we still produce an
+// Item value, just deriving state from `closed`.
+pub fn discussion_decoder() {
+  use github_id <- decode.field("databaseId", decode.int)
+  use number <- decode.field("number", decode.int)
+  use title <- decode.field("title", safe_string())
+  use body <- decode.field("body", safe_string())
+  use closed <- decode.field("closed", decode.bool)
+  let state = case closed {
+    True -> Closed
+    False -> Open
+  }
+  use state_reason <- decode.field(
+    "stateReason",
+    decode.optional(item_state_reason_decoder()),
+  )
+  use url <- decode.field("url", decode.string)
+  use created_at <- decode.field("createdAt", timestamp_decoder())
+  use updated_at <- decode.field("updatedAt", timestamp_decoder())
+  decode.success(Item(
+    github_id:,
+    number:,
+    title:,
+    body:,
+    state:,
+    state_reason:,
+    url:,
+    created_at:,
+    updated_at:,
+  ))
+}
+
+// GitHub's `issues` webhook event has a top-level `issue` field. We keep the
+// IssueWebhook name to mirror that wire shape; the inner value is an Item.
 pub type IssueWebhook {
-  IssueWebhook(action: String, issue: Issue)
+  IssueWebhook(action: String, item: Item)
 }
 
 pub fn issue_webhook_decoder() {
   use action <- decode.field("action", decode.string)
-  use issue <- decode.field("issue", issue_decoder())
+  use item <- decode.field("issue", issue_decoder())
 
-  decode.success(IssueWebhook(action:, issue:))
+  decode.success(IssueWebhook(action:, item:))
 }
 
 pub type SuggestedDuplicate {

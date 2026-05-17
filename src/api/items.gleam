@@ -8,7 +8,7 @@ import wisp.{type Response}
 pub fn list(ctx: Context) -> Response {
   case item.list(ctx.db) {
     Ok(list) -> {
-      json.array(list, of: github.issue_to_json)
+      json.array(list, of: github.item_to_json)
       |> json.to_string()
       |> wisp.json_response(200)
     }
@@ -21,7 +21,7 @@ pub fn get(ctx: Context, id: String) -> Response {
   case item.select(ctx.db, item_id) {
     Error(_) -> wisp.internal_server_error()
     Ok(item) -> {
-      github.issue_to_json(item) |> json.to_string() |> wisp.json_response(200)
+      github.item_to_json(item) |> json.to_string() |> wisp.json_response(200)
     }
   }
 }

@@ -60,7 +60,7 @@ pub fn list_items(client: squall.Client, cursor: Option(String)) {
 }
 
 pub type BackfillItem {
-  BackfillItem(issue: types.Issue, duplicate_of_number: Option(Int))
+  BackfillItem(item: types.Item, duplicate_of_number: Option(Int))
 }
 
 pub type ListItemsResponse {
@@ -78,9 +78,9 @@ fn list_items_response_decoder() -> decode.Decoder(ListItemsResponse) {
 }
 
 fn backfill_item_decoder() -> decode.Decoder(BackfillItem) {
-  use issue <- decode.then(types.issue_decoder())
+  use item <- decode.then(types.issue_decoder())
   use duplicate_of_number <- decode.then(duplicate_of_decoder())
-  decode.success(BackfillItem(issue:, duplicate_of_number:))
+  decode.success(BackfillItem(item:, duplicate_of_number:))
 }
 
 // The dupe signal in the immich workflow is the most recent comment, by the
@@ -128,6 +128,73 @@ fn parse_dupe_ref(body: String) -> Option(Int) {
       }
     _ -> option.None
   }
+}
+
+// Hardcoded ID of the immich-app/immich 'Feature Request' discussion
+// category. The user only cares about this category for dedupe; other
+// categories (Q&A, General, etc.) are conversational and not duplicate
+// candidates in the same sense.
+const feature_request_category_id = "DIC_kwDOGyI-8M4CUEPD"
+
+pub fn list_discussions(client: squall.Client, cursor: Option(String)) {
+  let query =
+    "
+    query ListDiscussions($cursor: String, $category: ID!) {
+      repository(owner: \"immich-app\", name: \"immich\") {
+        discussions(first: 100, after: $cursor, categoryId: $category) {
+          nodes {
+              databaseId
+              number
+              title
+              body
+              closed
+              stateReason
+              url
+              createdAt
+              updatedAt
+              comments(last: 1) {
+                  nodes {
+                      author { login }
+                      body
+                  }
+              }
+          }
+          pageInfo {
+              endCursor
+          }
+        }
+      }
+    }
+  "
+  let assert Ok(request) =
+    squall.prepare_request(
+      client,
+      query,
+      json.object([
+        #("cursor", json.nullable(cursor, json.string)),
+        #("category", json.string(feature_request_category_id)),
+      ]),
+    )
+
+  let assert Ok(response) = httpc.send(request)
+
+  squall.parse_response(response.body, list_discussions_response_decoder())
+}
+
+fn list_discussions_response_decoder() -> decode.Decoder(ListItemsResponse) {
+  let decoder = {
+    use items <- decode.field("nodes", decode.list(discussion_backfill_decoder()))
+    use page_info <- decode.field("pageInfo", page_info_decoder())
+    decode.success(ListItemsResponse(items:, page_info:))
+  }
+
+  decode.at(["repository", "discussions"], decoder)
+}
+
+fn discussion_backfill_decoder() -> decode.Decoder(BackfillItem) {
+  use item <- decode.then(types.discussion_decoder())
+  use duplicate_of_number <- decode.then(duplicate_of_decoder())
+  decode.success(BackfillItem(item:, duplicate_of_number:))
 }
 
 pub type PageInfo {

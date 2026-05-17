@@ -1,4 +1,5 @@
 import database/item
+import database/sql
 import github/graphql
 import gleam/dynamic/decode
 import gleam/json
@@ -94,12 +95,12 @@ pub fn handle_backfill_job(
   use _ <- result.try(
     pog.transaction(ctx.db, fn(conn) {
       use _ <- result.try(
-        list.map(items.items, fn(bi) { item.upsert(conn, bi.issue) })
+        list.map(items.items, fn(bi) { item.upsert(conn, sql.Issue, bi.item) })
         |> result.all()
         |> result.map_error(map_error),
       )
       list.map(items.items, fn(bi) {
-        item.apply_duplicate_of(conn, bi.issue.github_id, bi.duplicate_of_number)
+        item.apply_duplicate_of(conn, bi.item.github_id, bi.duplicate_of_number)
       })
       |> result.all()
       |> result.map_error(map_error)
@@ -110,9 +111,7 @@ pub fn handle_backfill_job(
   // Best-effort enqueues outside the transaction. embeddings.enqueue already
   // swallows ConstraintViolated, so this collects only the real errors.
   use _ <- result.try(
-    list.map(items.items, fn(bi) {
-      embeddings.enqueue(ctx.db, bi.issue.github_id)
-    })
+    list.map(items.items, fn(bi) { embeddings.enqueue(ctx.db, bi.item.github_id) })
     |> result.all()
     |> result.map_error(map_error),
   )

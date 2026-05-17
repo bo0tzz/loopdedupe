@@ -56,45 +56,48 @@ fn state_reason_into_sql(
 // when state_reason is Some we use upsert_item, when None we use
 // upsert_item_without_reason which omits the column from the INSERT and
 // nulls it in the UPDATE branch.
-pub fn upsert(db: pog.Connection, issue: types.Issue) {
-  let state = state_into_sql(issue.state)
-  case state_reason_into_sql(issue.state_reason) {
+//
+// `kind` flags whether the row is an issue or a discussion — both share the
+// same DB shape, the column just records which GitHub surface it came from.
+pub fn upsert(db: pog.Connection, kind: sql.ItemType, item: types.Item) {
+  let state = state_into_sql(item.state)
+  case state_reason_into_sql(item.state_reason) {
     option.Some(reason) ->
       sql.upsert_item(
         db,
-        issue.github_id,
-        issue.number,
-        sql.Issue,
-        issue.title,
-        issue.body,
+        item.github_id,
+        item.number,
+        kind,
+        item.title,
+        item.body,
         state,
         reason,
-        issue.url,
-        issue.created_at,
-        issue.updated_at,
+        item.url,
+        item.created_at,
+        item.updated_at,
       )
     option.None ->
       sql.upsert_item_without_reason(
         db,
-        issue.github_id,
-        issue.number,
-        sql.Issue,
-        issue.title,
-        issue.body,
+        item.github_id,
+        item.number,
+        kind,
+        item.title,
+        item.body,
         state,
-        issue.url,
-        issue.created_at,
-        issue.updated_at,
+        item.url,
+        item.created_at,
+        item.updated_at,
       )
   }
 }
 
-pub fn list(db: pog.Connection) -> Result(List(types.Issue), pog.QueryError) {
+pub fn list(db: pog.Connection) -> Result(List(types.Item), pog.QueryError) {
   sql.list_items(db) |> result.map(map_items)
 }
 
 // Backfill knows the full duplicate state of an item from the GitHub
-// timeline. Some => point at canonical; None => the issue is not marked as
+// timeline. Some => point at canonical; None => the item is not marked as
 // a duplicate of anything (clear whatever was there). Webhook doesn't call
 // this — it lacks the timeline data, so it preserves whatever's stored.
 pub fn apply_duplicate_of(
@@ -111,7 +114,7 @@ pub fn apply_duplicate_of(
 pub fn select(
   db: pog.Connection,
   item_id: Int,
-) -> Result(types.Issue, snag.Snag) {
+) -> Result(types.Item, snag.Snag) {
   sql.select_item(db, item_id)
   |> map_item()
 }
@@ -149,10 +152,10 @@ pub fn suggest_duplicates(db: pog.Connection, item_id: Int) {
 
 fn map_item(
   returned: Result(pog.Returned(sql.SelectItemRow), pog.QueryError),
-) -> Result(types.Issue, snag.Snag) {
+) -> Result(types.Item, snag.Snag) {
   case returned {
     Ok(pog.Returned(1, [row])) ->
-      Ok(types.Issue(
+      Ok(types.Item(
         github_id: row.github_id,
         number: row.number,
         title: row.title,
@@ -169,9 +172,9 @@ fn map_item(
   }
 }
 
-fn map_items(returned: pog.Returned(sql.ListItemsRow)) -> List(types.Issue) {
+fn map_items(returned: pog.Returned(sql.ListItemsRow)) -> List(types.Item) {
   list.map(returned.rows, fn(row) {
-    types.Issue(
+    types.Item(
       github_id: row.github_id,
       number: row.number,
       title: row.title,
