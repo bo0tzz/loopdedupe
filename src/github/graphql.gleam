@@ -39,6 +39,7 @@ pub fn list_items(client: squall.Client, cursor: Option(String)) {
               createdAt
               updatedAt
               closedAt
+              author { login }
               comments(last: 10) {
                   nodes {
                       author { login }
@@ -74,7 +75,14 @@ pub fn list_items(client: squall.Client, cursor: Option(String)) {
 }
 
 pub type BackfillItem {
-  BackfillItem(item: types.Item, duplicate_of_number: Option(Int))
+  BackfillItem(
+    item: types.Item,
+    duplicate_of_number: Option(Int),
+    // The login that filed this item, or None for ghost (deleted) authors.
+    // Surfaced alongside the item in the dashboard so same-author refilings
+    // pop visually without changing the underlying ranking.
+    author_login: Option(String),
+  )
 }
 
 pub type ListItemsResponse {
@@ -107,11 +115,23 @@ fn backfill_item_decoder() -> decode.Decoder(BackfillItem) {
     decode.optional(timestamp_decoder()),
   )
   use comment_ref <- decode.then(duplicate_of_decoder(closed_at))
+  use author_login <- decode.then(author_login_decoder())
   let duplicate_of_number = case converted_to {
     option.Some(_) -> converted_to
     option.None -> comment_ref
   }
-  decode.success(BackfillItem(item:, duplicate_of_number:))
+  decode.success(BackfillItem(item:, duplicate_of_number:, author_login:))
+}
+
+// GitHub's GraphQL author field is null for ghost (deleted) accounts. Use
+// optional_field for the outer wrapper so missing/null both fall to None.
+fn author_login_decoder() -> decode.Decoder(Option(String)) {
+  use author <- decode.optional_field(
+    "author",
+    option.None,
+    decode.optional(decode.at(["login"], decode.string)),
+  )
+  decode.success(author)
 }
 
 fn converted_to_discussion_decoder() -> decode.Decoder(Option(Int)) {
@@ -291,6 +311,7 @@ pub fn list_discussions(client: squall.Client, cursor: Option(String)) {
               createdAt
               updatedAt
               closedAt
+              author { login }
               comments(last: 10) {
                   nodes {
                       author { login }
@@ -339,7 +360,8 @@ fn discussion_backfill_decoder() -> decode.Decoder(BackfillItem) {
     decode.optional(timestamp_decoder()),
   )
   use duplicate_of_number <- decode.then(duplicate_of_decoder(closed_at))
-  decode.success(BackfillItem(item:, duplicate_of_number:))
+  use author_login <- decode.then(author_login_decoder())
+  decode.success(BackfillItem(item:, duplicate_of_number:, author_login:))
 }
 
 pub type PageInfo {

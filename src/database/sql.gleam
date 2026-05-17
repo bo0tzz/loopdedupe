@@ -9,6 +9,28 @@ import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 import pog
 
+/// Runs the `clear_author` query
+/// defined in `./src/database/sql/clear_author.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn clear_author(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "UPDATE items
+SET author_login = NULL
+WHERE github_id = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// Runs the `clear_duplicate_of` query
 /// defined in `./src/database/sql/clear_duplicate_of.sql`.
 ///
@@ -249,6 +271,7 @@ pub type DashboardTopPairsRow {
     source_item_type: ItemType,
     source_state: ItemState,
     source_state_reason: Option(ItemStateReason),
+    source_author: Option(String),
     source_original_id: Int,
     target_id: Int,
     target_number: Int,
@@ -256,6 +279,7 @@ pub type DashboardTopPairsRow {
     target_item_type: ItemType,
     target_state: ItemState,
     target_state_reason: Option(ItemStateReason),
+    target_author: Option(String),
     target_original_id: Int,
   )
 }
@@ -301,17 +325,19 @@ pub fn dashboard_top_pairs(
       6,
       decode.optional(item_state_reason_decoder()),
     )
-    use source_original_id <- decode.field(7, decode.int)
-    use target_id <- decode.field(8, decode.int)
-    use target_number <- decode.field(9, decode.int)
-    use target_title <- decode.field(10, decode.string)
-    use target_item_type <- decode.field(11, item_type_decoder())
-    use target_state <- decode.field(12, item_state_decoder())
+    use source_author <- decode.field(7, decode.optional(decode.string))
+    use source_original_id <- decode.field(8, decode.int)
+    use target_id <- decode.field(9, decode.int)
+    use target_number <- decode.field(10, decode.int)
+    use target_title <- decode.field(11, decode.string)
+    use target_item_type <- decode.field(12, item_type_decoder())
+    use target_state <- decode.field(13, item_state_decoder())
     use target_state_reason <- decode.field(
-      13,
+      14,
       decode.optional(item_state_reason_decoder()),
     )
-    use target_original_id <- decode.field(14, decode.int)
+    use target_author <- decode.field(15, decode.optional(decode.string))
+    use target_original_id <- decode.field(16, decode.int)
     decode.success(DashboardTopPairsRow(
       similarity:,
       source_id:,
@@ -320,6 +346,7 @@ pub fn dashboard_top_pairs(
       source_item_type:,
       source_state:,
       source_state_reason:,
+      source_author:,
       source_original_id:,
       target_id:,
       target_number:,
@@ -327,6 +354,7 @@ pub fn dashboard_top_pairs(
       target_item_type:,
       target_state:,
       target_state_reason:,
+      target_author:,
       target_original_id:,
     ))
   }
@@ -399,6 +427,7 @@ resolved AS (
            src_info.item_type                                                  AS source_item_type,
            src_info.state                                                      AS source_state,
            src_info.state_reason                                               AS source_state_reason,
+           src_info.author_login                                               AS source_author,
            e.source_item_id                                                    AS source_original_id,
            tgt_can.canonical_id                                                AS target_id,
            tgt_info.number                                                     AS target_number,
@@ -406,6 +435,7 @@ resolved AS (
            tgt_info.item_type                                                  AS target_item_type,
            tgt_info.state                                                      AS target_state,
            tgt_info.state_reason                                               AS target_state_reason,
+           tgt_info.author_login                                               AS target_author,
            e.target_item_id                                                    AS target_original_id,
            LEAST(src_can.canonical_id, tgt_can.canonical_id)                   AS pair_lo,
            GREATEST(src_can.canonical_id, tgt_can.canonical_id)                AS pair_hi
@@ -430,9 +460,9 @@ deduped AS (
 )
 SELECT similarity,
        source_id, source_number, source_title, source_item_type,
-       source_state, source_state_reason, source_original_id,
+       source_state, source_state_reason, source_author, source_original_id,
        target_id, target_number, target_title, target_item_type,
-       target_state, target_state_reason, target_original_id
+       target_state, target_state_reason, target_author, target_original_id
 FROM deduped
 ORDER BY similarity DESC
 LIMIT $1;
@@ -586,6 +616,7 @@ pub type ListItemsRow {
     github_created_at: Timestamp,
     github_updated_at: Timestamp,
     duplicate_of_number: Option(Int),
+    author_login: Option(String),
   )
 }
 
@@ -613,6 +644,7 @@ pub fn list_items(
     use github_created_at <- decode.field(8, pog.timestamp_decoder())
     use github_updated_at <- decode.field(9, pog.timestamp_decoder())
     use duplicate_of_number <- decode.field(10, decode.optional(decode.int))
+    use author_login <- decode.field(11, decode.optional(decode.string))
     decode.success(ListItemsRow(
       github_id:,
       number:,
@@ -625,6 +657,7 @@ pub fn list_items(
       github_created_at:,
       github_updated_at:,
       duplicate_of_number:,
+      author_login:,
     ))
   }
 
@@ -696,6 +729,30 @@ WHERE github_id = $1;
 "
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Runs the `set_author` query
+/// defined in `./src/database/sql/set_author.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn set_author(
+  db: pog.Connection,
+  arg_1: Int,
+  arg_2: String,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "UPDATE items
+SET author_login = $2
+WHERE github_id = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.text(arg_2))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }

@@ -114,6 +114,21 @@ pub fn apply_duplicate_of(
   }
 }
 
+// Same shape as apply_duplicate_of for the items.author_login column.
+// Author is captured at backfill time from the GraphQL response; webhook
+// payloads use a different field name (user.login vs author.login) so we
+// don't currently update author on webhook events.
+pub fn apply_author(
+  db: pog.Connection,
+  github_id: Int,
+  author: option.Option(String),
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  case author {
+    option.Some(login) -> sql.set_author(db, github_id, login)
+    option.None -> sql.clear_author(db, github_id)
+  }
+}
+
 pub fn select(
   db: pog.Connection,
   item_id: Int,

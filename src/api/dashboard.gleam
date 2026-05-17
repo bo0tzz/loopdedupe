@@ -114,6 +114,7 @@ fn style_block() -> String {
     .kind { display: inline-block; font-size: 0.7em; padding: 0.1em 0.4em; border-radius: 3px; background: #ddd; color: #333; vertical-align: middle; margin-right: 0.3em; }
     .kind-discussion { background: #c8e6c9; }
     .resolution-hint { font-size: 0.75em; opacity: 0.6; font-style: italic; margin-left: 0.5em; }
+    .author { font-size: 0.75em; opacity: 0.6; margin-left: 0.5em; font-variant: tabular-nums; }
     .state-closed { opacity: 0.55; }
     .state-duplicate { text-decoration: line-through; opacity: 0.55; }
     .item-body { white-space: pre-wrap; background: #f6f6f6; padding: 1em; border-radius: 6px; }
@@ -165,6 +166,7 @@ type PairSide {
     item_type: sql.ItemType,
     state: sql.ItemState,
     state_reason: Option(sql.ItemStateReason),
+    author: Option(String),
     resolved_via_chain: Bool,
   )
 }
@@ -185,6 +187,7 @@ fn orient_pair(row: sql.DashboardTopPairsRow) -> #(PairSide, PairSide, Bool) {
       item_type: row.source_item_type,
       state: row.source_state,
       state_reason: row.source_state_reason,
+      author: row.source_author,
       resolved_via_chain: row.source_id != row.source_original_id,
     )
   let tgt =
@@ -195,6 +198,7 @@ fn orient_pair(row: sql.DashboardTopPairsRow) -> #(PairSide, PairSide, Bool) {
       item_type: row.target_item_type,
       state: row.target_state,
       state_reason: row.target_state_reason,
+      author: row.target_author,
       resolved_via_chain: row.target_id != row.target_original_id,
     )
   case src.state, tgt.state {
@@ -251,6 +255,11 @@ fn pair_side(side: PairSide, role: String) -> String {
     True -> " <span class=\"resolution-hint\">↪ via dupe chain</span>"
     False -> ""
   }
+  let author_badge = case side.author {
+    option.Some(login) ->
+      " <span class=\"author\">by @" <> escape(login) <> "</span>"
+    option.None -> ""
+  }
   "<a class=\"pair pair-"
   <> role
   <> " "
@@ -263,6 +272,7 @@ fn pair_side(side: PairSide, role: String) -> String {
   <> int.to_string(side.number)
   <> " "
   <> escape(side.title)
+  <> author_badge
   <> resolution_hint
   <> "</a>"
 }

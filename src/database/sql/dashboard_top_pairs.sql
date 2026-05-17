@@ -66,6 +66,7 @@ resolved AS (
            src_info.item_type                                                  AS source_item_type,
            src_info.state                                                      AS source_state,
            src_info.state_reason                                               AS source_state_reason,
+           src_info.author_login                                               AS source_author,
            e.source_item_id                                                    AS source_original_id,
            tgt_can.canonical_id                                                AS target_id,
            tgt_info.number                                                     AS target_number,
@@ -73,6 +74,7 @@ resolved AS (
            tgt_info.item_type                                                  AS target_item_type,
            tgt_info.state                                                      AS target_state,
            tgt_info.state_reason                                               AS target_state_reason,
+           tgt_info.author_login                                               AS target_author,
            e.target_item_id                                                    AS target_original_id,
            LEAST(src_can.canonical_id, tgt_can.canonical_id)                   AS pair_lo,
            GREATEST(src_can.canonical_id, tgt_can.canonical_id)                AS pair_hi
@@ -97,9 +99,9 @@ deduped AS (
 )
 SELECT similarity,
        source_id, source_number, source_title, source_item_type,
-       source_state, source_state_reason, source_original_id,
+       source_state, source_state_reason, source_author, source_original_id,
        target_id, target_number, target_title, target_item_type,
-       target_state, target_state_reason, target_original_id
+       target_state, target_state_reason, target_author, target_original_id
 FROM deduped
 ORDER BY similarity DESC
 LIMIT $1;
