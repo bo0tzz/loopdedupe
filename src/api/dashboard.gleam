@@ -459,7 +459,7 @@ fn item_header(it: github.Item) -> String {
   <> escape(it.title)
   <> "</h2><p><a href=\""
   <> escape(it.url)
-  <> "\" target=\"_blank\" rel=\"noreferrer\">View on GitHub →</a> · "
+  <> "\">View on GitHub →</a> · "
   <> escape(format_date(it.created_at))
   <> "</p>"
 }
