@@ -106,7 +106,10 @@ fn style_block() -> String {
     @media (prefers-color-scheme: dark) { th, td { border-color: #333; } }
     th { font-weight: 600; opacity: 0.7; font-size: 0.85em; }
     .pair { display: block; }
-    .pair + .pair { margin-top: 0.25em; opacity: 0.85; }
+    .pair-candidate { font-weight: 600; }
+    .pair-canonical { opacity: 0.85; }
+    .pair-arrow { font-size: 0.75em; opacity: 0.55; margin: 0.15em 0 0.15em 0.5em; font-style: italic; }
+    .pair-arrow-sym { opacity: 0.45; }
     .similarity { font-variant-numeric: tabular-nums; font-weight: 600; }
     .kind { display: inline-block; font-size: 0.7em; padding: 0.1em 0.4em; border-radius: 3px; background: #ddd; color: #333; vertical-align: middle; margin-right: 0.3em; }
     .kind-discussion { background: #c8e6c9; }
@@ -154,6 +157,63 @@ fn stats_block(stats: Option(sql.DashboardStatsRow)) -> String {
   <> "</div>"
 }
 
+type PairSide {
+  PairSide(
+    id: Int,
+    number: Int,
+    title: String,
+    item_type: sql.ItemType,
+    state: sql.ItemState,
+    state_reason: Option(sql.ItemStateReason),
+    resolved_via_chain: Bool,
+  )
+}
+
+// Orient the pair into (candidate, canonical, is_symmetric).
+//
+// candidate = the open side; what a maintainer would act on (close as dupe).
+// canonical = the "maybe a dupe of" target. Often older / closed-completed.
+// is_symmetric = both sides open, so either could be the canonical. We pick
+// the older one (lower number) as canonical and the newer as candidate, but
+// surface that the direction isn't authoritative.
+fn orient_pair(row: sql.DashboardTopPairsRow) -> #(PairSide, PairSide, Bool) {
+  let src =
+    PairSide(
+      id: row.source_id,
+      number: row.source_number,
+      title: row.source_title,
+      item_type: row.source_item_type,
+      state: row.source_state,
+      state_reason: row.source_state_reason,
+      resolved_via_chain: row.source_id != row.source_original_id,
+    )
+  let tgt =
+    PairSide(
+      id: row.target_id,
+      number: row.target_number,
+      title: row.target_title,
+      item_type: row.target_item_type,
+      state: row.target_state,
+      state_reason: row.target_state_reason,
+      resolved_via_chain: row.target_id != row.target_original_id,
+    )
+  case src.state, tgt.state {
+    sql.Open, sql.Closed -> #(src, tgt, False)
+    sql.Closed, sql.Open -> #(tgt, src, False)
+    sql.Open, sql.Open -> {
+      // Both open — pick the newer (higher number) as candidate.
+      case src.number > tgt.number {
+        True -> #(src, tgt, True)
+        False -> #(tgt, src, True)
+      }
+    }
+    // Both-closed pairs are filtered upstream in dashboard_top_pairs.sql,
+    // but if one slips through we still render it. The "candidate" label
+    // is meaningless here; treat as symmetric and let the maintainer judge.
+    sql.Closed, sql.Closed -> #(src, tgt, True)
+  }
+}
+
 fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
   case rows {
     [] -> "<p><em>No pairs yet. Run backfill to populate.</em></p>"
@@ -161,27 +221,19 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
       "<table><thead><tr><th>Sim</th><th>Pair</th></tr></thead><tbody>"
       <> {
         list.map(rows, fn(row) {
+          let #(candidate, canonical, symmetric) = orient_pair(row)
+          let separator = case symmetric {
+            True ->
+              "<div class=\"pair-arrow pair-arrow-sym\">↔ either could be the canonical</div>"
+            False ->
+              "<div class=\"pair-arrow\">↓ maybe a duplicate of</div>"
+          }
           "<tr><td class=\"similarity\">"
           <> format_similarity(row.similarity)
           <> "</td><td>"
-          <> pair_side(
-            row.source_id,
-            row.source_number,
-            row.source_title,
-            row.source_item_type,
-            row.source_state,
-            row.source_state_reason,
-            row.source_id != row.source_original_id,
-          )
-          <> pair_side(
-            row.target_id,
-            row.target_number,
-            row.target_title,
-            row.target_item_type,
-            row.target_state,
-            row.target_state_reason,
-            row.target_id != row.target_original_id,
-          )
+          <> pair_side(candidate, "candidate")
+          <> separator
+          <> pair_side(canonical, "canonical")
           <> "</td></tr>"
         })
         |> string.concat()
@@ -190,29 +242,23 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
   }
 }
 
-fn pair_side(
-  github_id: Int,
-  number: Int,
-  title: String,
-  item_type: sql.ItemType,
-  state: sql.ItemState,
-  state_reason: Option(sql.ItemStateReason),
-  resolved_via_chain: Bool,
-) -> String {
-  let resolution_hint = case resolved_via_chain {
+fn pair_side(side: PairSide, role: String) -> String {
+  let resolution_hint = case side.resolved_via_chain {
     True -> " <span class=\"resolution-hint\">↪ resolved canonical</span>"
     False -> ""
   }
-  "<a class=\"pair "
-  <> state_class(state, state_reason)
-  <> "\" href=\"/items/"
-  <> int.to_string(github_id)
-  <> "\">"
-  <> kind_badge(item_type)
-  <> "#"
-  <> int.to_string(number)
+  "<a class=\"pair pair-"
+  <> role
   <> " "
-  <> escape(title)
+  <> state_class(side.state, side.state_reason)
+  <> "\" href=\"/items/"
+  <> int.to_string(side.id)
+  <> "\">"
+  <> kind_badge(side.item_type)
+  <> "#"
+  <> int.to_string(side.number)
+  <> " "
+  <> escape(side.title)
   <> resolution_hint
   <> "</a>"
 }

@@ -72,7 +72,7 @@ pub fn queue_spec(conn: pog.Connection) {
     error_decoder: embeddings_job_error_decoder(),
     handler_function: handle_embeddings_job(conn, _),
     default_job_timeout: duration.minutes(1),
-    poll_interval: 5000,
+    poll_interval: 500,
     heartbeat_interval: 3000,
     allowed_heartbeat_misses: 3,
     executor_init_timeout: 1000,
