@@ -236,7 +236,7 @@ pub type DashboardTopPairsRow {
 }
 
 /// Resolves each side of every similarity edge through the duplicate_of chain
-/// to its canonical, then filters to actionable pairs.
+/// to its canonical, then filters and deduplicates to actionable pairs.
 /// 
 /// Chain walk: items.duplicate_of_number (per-repo number of the canonical) →
 /// items.number (lookup). Dangling refs (PRs, cross-repo, typos) drop out of
@@ -251,6 +251,11 @@ pub type DashboardTopPairsRow {
 /// We still drop pairs where either side is state_reason='duplicate' WITHOUT a
 /// captured duplicate_of_number — those are dupes we know about but can't
 /// resolve. They reappear once the canonical is captured.
+/// 
+/// Deduplication: item_similarity_edges stores both directions of each pair
+/// (each side gets embedded and computes its own kNN), so without a final
+/// pass on the unordered pair (LEAST/GREATEST) the same suggestion shows up
+/// twice in the feed.
 ///
 /// > 🐿️ This function was generated automatically using v4.6.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -301,7 +306,7 @@ pub fn dashboard_top_pairs(
   }
 
   "-- Resolves each side of every similarity edge through the duplicate_of chain
--- to its canonical, then filters to actionable pairs.
+-- to its canonical, then filters and deduplicates to actionable pairs.
 --
 -- Chain walk: items.duplicate_of_number (per-repo number of the canonical) →
 -- items.number (lookup). Dangling refs (PRs, cross-repo, typos) drop out of
@@ -316,6 +321,11 @@ pub fn dashboard_top_pairs(
 -- We still drop pairs where either side is state_reason='duplicate' WITHOUT a
 -- captured duplicate_of_number — those are dupes we know about but can't
 -- resolve. They reappear once the canonical is captured.
+--
+-- Deduplication: item_similarity_edges stores both directions of each pair
+-- (each side gets embedded and computes its own kNN), so without a final
+-- pass on the unordered pair (LEAST/GREATEST) the same suggestion shows up
+-- twice in the feed.
 WITH RECURSIVE chain(orig_id, current_id, depth) AS (
     SELECT github_id, github_id, 0
     FROM items
@@ -333,36 +343,51 @@ canonical AS (
     SELECT DISTINCT ON (orig_id) orig_id, current_id AS canonical_id
     FROM chain
     ORDER BY orig_id, depth DESC
+),
+resolved AS (
+    SELECT e.similarity,
+           src_can.canonical_id                                                AS source_id,
+           src_info.number                                                     AS source_number,
+           src_info.title                                                      AS source_title,
+           src_info.item_type                                                  AS source_item_type,
+           src_info.state                                                      AS source_state,
+           src_info.state_reason                                               AS source_state_reason,
+           e.source_item_id                                                    AS source_original_id,
+           tgt_can.canonical_id                                                AS target_id,
+           tgt_info.number                                                     AS target_number,
+           tgt_info.title                                                      AS target_title,
+           tgt_info.item_type                                                  AS target_item_type,
+           tgt_info.state                                                      AS target_state,
+           tgt_info.state_reason                                               AS target_state_reason,
+           e.target_item_id                                                    AS target_original_id,
+           LEAST(src_can.canonical_id, tgt_can.canonical_id)                   AS pair_lo,
+           GREATEST(src_can.canonical_id, tgt_can.canonical_id)                AS pair_hi
+    FROM item_similarity_edges e
+             JOIN canonical src_can ON src_can.orig_id = e.source_item_id
+             JOIN canonical tgt_can ON tgt_can.orig_id = e.target_item_id
+             JOIN items src_info ON src_info.github_id = src_can.canonical_id
+             JOIN items tgt_info ON tgt_info.github_id = tgt_can.canonical_id
+    WHERE src_can.canonical_id != tgt_can.canonical_id
+      AND (src_info.state = 'open' OR tgt_info.state = 'open')
+      AND src_info.state_reason IS DISTINCT FROM 'duplicate'
+      AND tgt_info.state_reason IS DISTINCT FROM 'duplicate'
+      AND NOT EXISTS (SELECT 1
+                      FROM item_duplicates d
+                      WHERE (d.source_item_id = src_can.canonical_id AND d.target_item_id = tgt_can.canonical_id)
+                         OR (d.source_item_id = tgt_can.canonical_id AND d.target_item_id = src_can.canonical_id))
+),
+deduped AS (
+    SELECT DISTINCT ON (pair_lo, pair_hi) *
+    FROM resolved
+    ORDER BY pair_lo, pair_hi, similarity DESC
 )
-SELECT e.similarity,
-       src_can.canonical_id AS source_id,
-       src_info.number      AS source_number,
-       src_info.title       AS source_title,
-       src_info.item_type   AS source_item_type,
-       src_info.state       AS source_state,
-       src_info.state_reason AS source_state_reason,
-       e.source_item_id     AS source_original_id,
-       tgt_can.canonical_id AS target_id,
-       tgt_info.number      AS target_number,
-       tgt_info.title       AS target_title,
-       tgt_info.item_type   AS target_item_type,
-       tgt_info.state       AS target_state,
-       tgt_info.state_reason AS target_state_reason,
-       e.target_item_id     AS target_original_id
-FROM item_similarity_edges e
-         JOIN canonical src_can ON src_can.orig_id = e.source_item_id
-         JOIN canonical tgt_can ON tgt_can.orig_id = e.target_item_id
-         JOIN items src_info ON src_info.github_id = src_can.canonical_id
-         JOIN items tgt_info ON tgt_info.github_id = tgt_can.canonical_id
-WHERE src_can.canonical_id != tgt_can.canonical_id
-  AND (src_info.state = 'open' OR tgt_info.state = 'open')
-  AND src_info.state_reason IS DISTINCT FROM 'duplicate'
-  AND tgt_info.state_reason IS DISTINCT FROM 'duplicate'
-  AND NOT EXISTS (SELECT 1
-                  FROM item_duplicates d
-                  WHERE (d.source_item_id = src_can.canonical_id AND d.target_item_id = tgt_can.canonical_id)
-                     OR (d.source_item_id = tgt_can.canonical_id AND d.target_item_id = src_can.canonical_id))
-ORDER BY e.similarity DESC
+SELECT similarity,
+       source_id, source_number, source_title, source_item_type,
+       source_state, source_state_reason, source_original_id,
+       target_id, target_number, target_title, target_item_type,
+       target_state, target_state_reason, target_original_id
+FROM deduped
+ORDER BY similarity DESC
 LIMIT $1;
 "
   |> pog.query
