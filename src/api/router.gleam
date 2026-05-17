@@ -39,6 +39,7 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
     Post, ["api", "backfill", "incremental"] -> start_incremental_backfill(ctx)
     Post, ["api", "judgments", "not-duplicate"] ->
       dashboard.dismiss_pair(req, ctx)
+    Get, ["judgments"] -> dashboard.judgments(ctx)
     Get, [] -> dashboard.index(ctx)
     Get, ["dashboard", "stats"] -> dashboard.stats_fragment(ctx)
     Get, ["items", id] -> dashboard.item_detail(ctx, id)

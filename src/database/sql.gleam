@@ -524,14 +524,20 @@ pub fn get_rerank_cache(
     ))
   }
 
-  "SELECT target_item_id,
-       relevance_score,
+  "SELECT c.target_item_id,
+       c.relevance_score,
        i.title,
        i.state,
        i.state_reason
 FROM item_rerank_cache c
          JOIN items i ON i.github_id = c.target_item_id
 WHERE c.source_item_id = $1
+  AND NOT EXISTS (
+    SELECT 1 FROM pair_judgments j
+    WHERE j.source_item_id = LEAST($1::bigint, c.target_item_id)
+      AND j.target_item_id = GREATEST($1::bigint, c.target_item_id)
+      AND j.verdict = 'not_duplicate'
+  )
 ORDER BY c.relevance_score DESC
 LIMIT 10;
 "
@@ -786,6 +792,112 @@ pub fn list_items(
   |> pog.execute(db)
 }
 
+/// A row you get from running the `list_judgments` query
+/// defined in `./src/database/sql/list_judgments.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type ListJudgmentsRow {
+  ListJudgmentsRow(
+    source_item_id: Int,
+    target_item_id: Int,
+    verdict: PairVerdict,
+    judged_at: Timestamp,
+    source_number: Int,
+    source_title: String,
+    source_item_type: ItemType,
+    source_state: ItemState,
+    source_state_reason: Option(ItemStateReason),
+    source_author: Option(String),
+    target_number: Int,
+    target_title: String,
+    target_item_type: ItemType,
+    target_state: ItemState,
+    target_state_reason: Option(ItemStateReason),
+    target_author: Option(String),
+  )
+}
+
+/// Runs the `list_judgments` query
+/// defined in `./src/database/sql/list_judgments.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn list_judgments(
+  db: pog.Connection,
+) -> Result(pog.Returned(ListJudgmentsRow), pog.QueryError) {
+  let decoder = {
+    use source_item_id <- decode.field(0, decode.int)
+    use target_item_id <- decode.field(1, decode.int)
+    use verdict <- decode.field(2, pair_verdict_decoder())
+    use judged_at <- decode.field(3, pog.timestamp_decoder())
+    use source_number <- decode.field(4, decode.int)
+    use source_title <- decode.field(5, decode.string)
+    use source_item_type <- decode.field(6, item_type_decoder())
+    use source_state <- decode.field(7, item_state_decoder())
+    use source_state_reason <- decode.field(
+      8,
+      decode.optional(item_state_reason_decoder()),
+    )
+    use source_author <- decode.field(9, decode.optional(decode.string))
+    use target_number <- decode.field(10, decode.int)
+    use target_title <- decode.field(11, decode.string)
+    use target_item_type <- decode.field(12, item_type_decoder())
+    use target_state <- decode.field(13, item_state_decoder())
+    use target_state_reason <- decode.field(
+      14,
+      decode.optional(item_state_reason_decoder()),
+    )
+    use target_author <- decode.field(15, decode.optional(decode.string))
+    decode.success(ListJudgmentsRow(
+      source_item_id:,
+      target_item_id:,
+      verdict:,
+      judged_at:,
+      source_number:,
+      source_title:,
+      source_item_type:,
+      source_state:,
+      source_state_reason:,
+      source_author:,
+      target_number:,
+      target_title:,
+      target_item_type:,
+      target_state:,
+      target_state_reason:,
+      target_author:,
+    ))
+  }
+
+  "SELECT j.source_item_id,
+       j.target_item_id,
+       j.verdict,
+       j.judged_at,
+       s.number       AS source_number,
+       s.title        AS source_title,
+       s.item_type    AS source_item_type,
+       s.state        AS source_state,
+       s.state_reason AS source_state_reason,
+       s.author_login AS source_author,
+       t.number       AS target_number,
+       t.title        AS target_title,
+       t.item_type    AS target_item_type,
+       t.state        AS target_state,
+       t.state_reason AS target_state_reason,
+       t.author_login AS target_author
+FROM pair_judgments j
+         JOIN items s ON s.github_id = j.source_item_id
+         JOIN items t ON t.github_id = j.target_item_id
+ORDER BY j.judged_at DESC
+LIMIT 200;
+"
+  |> pog.query
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `select_item` query
 /// defined in `./src/database/sql/select_item.sql`.
 ///
@@ -970,6 +1082,12 @@ SELECT
     i.state_reason
 FROM all_edges ae
          JOIN items i ON i.github_id = ae.target_item_id
+WHERE NOT EXISTS (
+    SELECT 1 FROM pair_judgments j
+    WHERE j.source_item_id = LEAST($1::bigint, ae.target_item_id)
+      AND j.target_item_id = GREATEST($1::bigint, ae.target_item_id)
+      AND j.verdict = 'not_duplicate'
+)
 ORDER BY ae.similarity DESC
 LIMIT 50;
 "
@@ -1168,6 +1286,14 @@ fn item_type_encoder(item_type) -> pog.Value {
 ///
 pub type PairVerdict {
   NotDuplicate
+}
+
+fn pair_verdict_decoder() -> decode.Decoder(PairVerdict) {
+  use pair_verdict <- decode.then(decode.string)
+  case pair_verdict {
+    "not_duplicate" -> decode.success(NotDuplicate)
+    _ -> decode.failure(NotDuplicate, "PairVerdict")
+  }
 }
 
 fn pair_verdict_encoder(pair_verdict) -> pog.Value {

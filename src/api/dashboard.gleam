@@ -56,6 +56,64 @@ pub fn stats_fragment(ctx: Context) -> Response {
 // 'not_duplicate' judgment, return empty body. The pair's <tr> has
 // hx-swap='delete' which removes the row visually. The dashboard query
 // filters out judged pairs so the dismissal sticks across reloads.
+pub fn judgments(ctx: Context) -> Response {
+  let rows = case sql.list_judgments(ctx.db) {
+    Ok(pog.Returned(_, r)) -> r
+    Error(_) -> []
+  }
+  let body =
+    page("loopdedupe · judgments", [
+      "<header-link><a href=\"/\">← back to dashboard</a></header-link>",
+      "<h2>Dismissed pairs</h2>",
+      "<p class=\"muted\">Pairs you've marked as not-a-duplicate. They're filtered out of the candidates feed and the per-item drill-in until removed from <code>pair_judgments</code>.</p>",
+      judgments_table(rows),
+    ])
+  wisp.html_response(body, 200)
+}
+
+fn judgments_table(rows: List(sql.ListJudgmentsRow)) -> String {
+  case rows {
+    [] -> "<p><em>No dismissed pairs yet.</em></p>"
+    _ ->
+      "<table><thead><tr><th>Dismissed</th><th>Pair</th></tr></thead><tbody>"
+      <> {
+        list.map(rows, fn(row) {
+          let src =
+            PairSide(
+              id: row.source_item_id,
+              number: row.source_number,
+              title: row.source_title,
+              item_type: row.source_item_type,
+              state: row.source_state,
+              state_reason: row.source_state_reason,
+              author: row.source_author,
+              resolved_via_chain: False,
+            )
+          let tgt =
+            PairSide(
+              id: row.target_item_id,
+              number: row.target_number,
+              title: row.target_title,
+              item_type: row.target_item_type,
+              state: row.target_state,
+              state_reason: row.target_state_reason,
+              author: row.target_author,
+              resolved_via_chain: False,
+            )
+          "<tr><td class=\"muted\">"
+          <> escape(format_date(row.judged_at))
+          <> "</td><td>"
+          <> pair_side(src, "candidate")
+          <> "<div class=\"pair-arrow\">↮ not a duplicate</div>"
+          <> pair_side(tgt, "canonical")
+          <> "</td></tr>"
+        })
+        |> string.concat()
+      }
+      <> "</tbody></table>"
+  }
+}
+
 pub fn dismiss_pair(req: Request, ctx: Context) -> Response {
   let query = wisp.get_query(req)
   let a = result.try(list.key_find(query, "a"), int.parse)
@@ -103,7 +161,9 @@ fn page(title: String, sections: List(String)) -> String {
   <> "</title>"
   <> style_block()
   <> "<script src=\"https://unpkg.com/htmx.org@1.9.10\"></script>"
-  <> "</head><body><header><a href=\"/\"><strong>loopdedupe</strong></a></header><main>"
+  <> "</head><body><header><a href=\"/\"><strong>loopdedupe</strong></a>"
+  <> " <a href=\"/judgments\" class=\"nav-link\">judgments</a>"
+  <> "</header><main>"
   <> string.concat(sections)
   <> "</main></body></html>"
 }
@@ -114,6 +174,8 @@ fn style_block() -> String {
     body { font-family: system-ui, -apple-system, sans-serif; max-width: 1400px; margin: 0 auto; padding: 1em; line-height: 1.4; }
     header { padding: 0.5em 0; margin-bottom: 1em; border-bottom: 1px solid #ddd; }
     header a { color: inherit; text-decoration: none; }
+    header .nav-link { margin-left: 1em; opacity: 0.6; font-size: 0.95em; }
+    header .nav-link:hover { opacity: 1; }
     h2 { margin-top: 0; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1em; padding: 1em; background: #f6f6f6; border-radius: 6px; margin-bottom: 1.5em; }
     @media (prefers-color-scheme: dark) { .stats { background: #222; } }
@@ -143,6 +205,10 @@ fn style_block() -> String {
     .dismiss { background: transparent; border: 1px solid #ccc; border-radius: 3px; padding: 0.1em 0.45em; cursor: pointer; opacity: 0.4; color: inherit; font-size: 1.1em; line-height: 1; }
     .dismiss:hover { opacity: 1; background: rgba(200, 50, 50, 0.1); border-color: rgba(200, 50, 50, 0.5); color: #c33; }
     @media (prefers-color-scheme: dark) { .dismiss { border-color: #555; } .dismiss:hover { background: rgba(255, 100, 100, 0.15); border-color: #d77; color: #f88; } }
+    .muted { opacity: 0.7; font-size: 0.9em; }
+    header-link { display: block; margin-bottom: 1em; font-size: 0.9em; }
+    header-link a { color: inherit; text-decoration: none; opacity: 0.7; }
+    header-link a:hover { opacity: 1; }
     .state-closed { opacity: 0.55; }
     .state-duplicate { text-decoration: line-through; opacity: 0.55; }
     .item-body { white-space: pre-wrap; background: #f6f6f6; padding: 1em; border-radius: 6px; }
