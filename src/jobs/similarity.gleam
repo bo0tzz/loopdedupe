@@ -51,7 +51,9 @@ fn similarity_job_decoder() -> decode.Decoder(SimilarityJob) {
 pub fn queue_spec(conn: pog.Connection) {
   m25.Queue(
     name: "similarity",
-    max_concurrency: 4,
+    // Local pgvector kNN — no external rate limit, just postgres CPU. 16
+    // workers keeps the queue draining without hammering the DB.
+    max_concurrency: 16,
     input_to_json: similarity_job_to_json,
     input_decoder: similarity_job_decoder(),
     output_to_json: json.string,
@@ -60,7 +62,7 @@ pub fn queue_spec(conn: pog.Connection) {
     error_decoder: similarity_job_error_decoder(),
     handler_function: handle_similarity_job(conn, _),
     default_job_timeout: duration.minutes(1),
-    poll_interval: 5000,
+    poll_interval: 500,
     heartbeat_interval: 3000,
     allowed_heartbeat_misses: 3,
     executor_init_timeout: 1000,
@@ -84,5 +86,16 @@ pub fn enqueue(conn: pog.Connection, item_id: Int) {
   let job =
     m25.new_job(SimilarityJob(item_id:))
     |> m25.retry(3, option.Some(duration.seconds(30)))
-  m25.enqueue(conn, queue_spec(conn), job)
+    // Dedupe per item like the embeddings queue does. A re-trigger of
+    // backfill enqueues similarity for every item it sees; without
+    // unique_key those would stack up.
+    |> m25.unique_key("similarity:" <> int.to_string(item_id))
+  case m25.enqueue(conn, queue_spec(conn), job) {
+    Ok(_) -> Ok(Nil)
+    // A non-failed/non-cancelled job for this item already exists. That's
+    // exactly the dedup we want — treat as success.
+    Error(m25.JobRecordFetchQueryError(pog.ConstraintViolated(_, _, _))) ->
+      Ok(Nil)
+    Error(e) -> Error(e)
+  }
 }

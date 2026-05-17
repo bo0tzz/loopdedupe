@@ -120,11 +120,14 @@ pub fn select(
 }
 
 pub fn suggest_duplicates(db: pog.Connection, item_id: Int) {
-  // With the title+stripped-body+EOS embed format on E5-Mistral, related
-  // pairs sit around 0.85-0.92 in our small validation set while unrelated
-  // pairs land at 0.70-0.80. 0.85 is the threshold that cleanly separates
-  // them; revisit once we have real maintainer judgments to tune against.
-  case sql.suggest_duplicates(db, item_id, 0.85) {
+  // Tuned against 1917 ground-truth dupe pairs captured from maintainer
+  // close-comments and convert-to-discussion events:
+  //   threshold 0.85 → 56.7% of real dupes surfaced
+  //   threshold 0.75 → 94.1% of real dupes surfaced
+  // Noise floor's 99th percentile is 0.78 so 0.75 sits just below it; the
+  // per-item drill-in is a triage surface where recall beats precision
+  // since the maintainer is going to read each candidate anyway.
+  case sql.suggest_duplicates(db, item_id, 0.75) {
     Ok(pog.Returned(_, rows)) -> {
       //TODO: Resolve canonical/root items in query
       let items =

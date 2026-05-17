@@ -1,6 +1,12 @@
 -- Resolves each side of every similarity edge through the duplicate_of chain
 -- to its canonical, then filters and deduplicates to actionable pairs.
 --
+-- Performance strategy: we don't run the full pipeline over all ~2M edges.
+-- Instead we pre-filter to the top-K most-similar edges (the universe the
+-- dashboard could actually surface), then resolve / filter / dedup only
+-- those. The over-fetch factor of ~20x keeps a buffer for pairs that
+-- collapse via canonical resolution or get filtered out.
+--
 -- Chain walk: items.duplicate_of_number (per-repo number of the canonical) →
 -- items.number (lookup). Dangling refs (PRs, cross-repo, typos) drop out of
 -- the join naturally because the target won't be in items.
@@ -11,26 +17,41 @@
 --   - at least one canonical is open (the maintainer can do something),
 --   - the pair isn't already recorded as a known dupe in item_duplicates.
 --
--- We still drop pairs where either side is state_reason='duplicate' WITHOUT a
--- captured duplicate_of_number — those are dupes we know about but can't
+-- We still drop pairs where either side is state_reason='duplicate' WITHOUT
+-- a captured duplicate_of_number — those are dupes we know about but can't
 -- resolve. They reappear once the canonical is captured.
---
--- Deduplication: item_similarity_edges stores both directions of each pair
--- (each side gets embedded and computes its own kNN), so without a final
--- pass on the unordered pair (LEAST/GREATEST) the same suggestion shows up
--- twice in the feed.
-WITH RECURSIVE chain(orig_id, current_id, depth) AS (
-    SELECT github_id, github_id, 0
-    FROM items
-
-    UNION ALL
-
-    SELECT c.orig_id, target.github_id, c.depth + 1
-    FROM chain c
-             JOIN items source ON source.github_id = c.current_id
-             JOIN items target ON target.number = source.duplicate_of_number
-    WHERE source.duplicate_of_number IS NOT NULL
-      AND c.depth < 10
+WITH top_edges AS (
+    -- Over-fetch generously: with both directions stored per pair, chain
+    -- resolution collapse, and the state-based filters, the survival rate
+    -- can be ~2-5%. 10k edges at >=0.80 gives enough buffer to comfortably
+    -- yield the top-50 the dashboard wants.
+    SELECT source_item_id, target_item_id, similarity
+    FROM item_similarity_edges
+    WHERE similarity >= 0.80
+    ORDER BY similarity DESC
+    LIMIT 10000
+),
+relevant_ids AS (
+    SELECT source_item_id AS id FROM top_edges
+    UNION
+    SELECT target_item_id FROM top_edges
+),
+chain_seed AS (
+    SELECT DISTINCT id AS orig_id
+    FROM relevant_ids
+),
+chain AS (
+    WITH RECURSIVE walk(orig_id, current_id, depth) AS (
+        SELECT orig_id, orig_id, 0 FROM chain_seed
+        UNION ALL
+        SELECT w.orig_id, target.github_id, w.depth + 1
+        FROM walk w
+                 JOIN items source ON source.github_id = w.current_id
+                 JOIN items target ON target.number = source.duplicate_of_number
+        WHERE source.duplicate_of_number IS NOT NULL
+          AND w.depth < 10
+    )
+    SELECT * FROM walk
 ),
 canonical AS (
     SELECT DISTINCT ON (orig_id) orig_id, current_id AS canonical_id
@@ -55,7 +76,7 @@ resolved AS (
            e.target_item_id                                                    AS target_original_id,
            LEAST(src_can.canonical_id, tgt_can.canonical_id)                   AS pair_lo,
            GREATEST(src_can.canonical_id, tgt_can.canonical_id)                AS pair_hi
-    FROM item_similarity_edges e
+    FROM top_edges e
              JOIN canonical src_can ON src_can.orig_id = e.source_item_id
              JOIN canonical tgt_can ON tgt_can.orig_id = e.target_item_id
              JOIN items src_info ON src_info.github_id = src_can.canonical_id
