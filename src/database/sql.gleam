@@ -597,6 +597,26 @@ DO UPDATE SET relevance_score = EXCLUDED.relevance_score,
   |> pog.execute(db)
 }
 
+/// Runs the `invalidate_rerank_cache` query
+/// defined in `./src/database/sql/invalidate_rerank_cache.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn invalidate_rerank_cache(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "DELETE FROM item_rerank_cache WHERE source_item_id = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `latest_discussion_update` query
 /// defined in `./src/database/sql/latest_discussion_update.sql`.
 ///

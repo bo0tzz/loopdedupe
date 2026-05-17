@@ -135,7 +135,11 @@ pub fn issue_decoder() {
       ],
     )
   use state_reason <- decode.then(state_reason_decoder)
-  use url <- decode.field("url", decode.string)
+  let url_decoder =
+    decode.one_of(decode.at(["url"], decode.string), or: [
+      decode.at(["html_url"], decode.string),
+    ])
+  use url <- decode.then(url_decoder)
   let created_at_decoder =
     decode.one_of(decode.at(["created_at"], timestamp_decoder()), or: [
       decode.at(["createdAt"], timestamp_decoder()),
@@ -204,6 +208,23 @@ pub fn issue_webhook_decoder() {
   use item <- decode.field("issue", issue_decoder())
 
   decode.success(IssueWebhook(action:, item:))
+}
+
+// Discussion webhook payload shape. Field-for-field similar to issue
+// webhooks (we reuse issue_decoder for the inner item), with the addition
+// of `category.slug` so the handler can filter to feature-request only.
+pub type DiscussionWebhook {
+  DiscussionWebhook(action: String, item: Item, category_slug: String)
+}
+
+pub fn discussion_webhook_decoder() {
+  use action <- decode.field("action", decode.string)
+  use item <- decode.field("discussion", issue_decoder())
+  use category_slug <- decode.field(
+    "discussion",
+    decode.at(["category", "slug"], decode.string),
+  )
+  decode.success(DiscussionWebhook(action:, item:, category_slug:))
 }
 
 pub type SuggestedDuplicate {
