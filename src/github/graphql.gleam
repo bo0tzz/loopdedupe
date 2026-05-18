@@ -409,11 +409,14 @@ fn parse_bare_ref(body: String) -> Option(Int) {
 
 // Compiled once at first use; the assertion is fine because the pattern is
 // a constant. Captures the trigger phrase (group 1, unused) and the digit
-// sequence (group 2).
+// sequence (group 2). [^#\n]{0,30} allows short modifiers between the
+// trigger and '#N' ('in favour of THE MORE ACTIVE #4747') while stopping
+// at the next '#' so we capture the first reference, and at newline so we
+// don't cross paragraph boundaries.
 fn dupe_phrase_regex() -> regexp.Regexp {
   let assert Ok(re) =
     regexp.compile(
-      "(duplicate of|dupe of|tracked in|covered by|same as)\\s+#(\\d+)\\b",
+      "\\b(duplicate of|dupe of|tracked in|tracking in|track this in|covered by|same as|same issue as|in favou?r of|roll into|consolidate into)[^#\\n]{0,30}#(\\d+)\\b",
       regexp.Options(case_insensitive: True, multi_line: True),
     )
   re
