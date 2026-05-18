@@ -135,8 +135,15 @@ pub fn handle_job(
         |> result.all()
         |> result.map_error(map_error),
       )
+      use _ <- result.try(
+        list.map(page.items, fn(bi) {
+          item.apply_author(conn, bi.item.github_id, bi.author_login)
+        })
+        |> result.all()
+        |> result.map_error(map_error),
+      )
       list.map(page.items, fn(bi) {
-        item.apply_author(conn, bi.item.github_id, bi.author_login)
+        item.apply_closed_by(conn, bi.item.github_id, bi.closed_by)
       })
       |> result.all()
       |> result.map_error(map_error)

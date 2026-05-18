@@ -129,6 +129,19 @@ pub fn apply_author(
   }
 }
 
+// Closer login, captured from the ClosedEvent timeline entry at backfill.
+// Discussions always pass None (their GraphQL type has no timeline).
+pub fn apply_closed_by(
+  db: pog.Connection,
+  github_id: Int,
+  closer: option.Option(String),
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  case closer {
+    option.Some(login) -> sql.set_closed_by(db, github_id, login)
+    option.None -> sql.clear_closed_by(db, github_id)
+  }
+}
+
 pub fn select(
   db: pog.Connection,
   item_id: Int,

@@ -31,6 +31,28 @@ WHERE github_id = $1;
   |> pog.execute(db)
 }
 
+/// Runs the `clear_closed_by` query
+/// defined in `./src/database/sql/clear_closed_by.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn clear_closed_by(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "UPDATE items
+SET closed_by = NULL
+WHERE github_id = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// Runs the `clear_duplicate_of` query
 /// defined in `./src/database/sql/clear_duplicate_of.sql`.
 ///
@@ -790,6 +812,7 @@ pub type ListItemsRow {
     github_updated_at: Timestamp,
     duplicate_of_number: Option(Int),
     author_login: Option(String),
+    closed_by: Option(String),
   )
 }
 
@@ -818,6 +841,7 @@ pub fn list_items(
     use github_updated_at <- decode.field(9, pog.timestamp_decoder())
     use duplicate_of_number <- decode.field(10, decode.optional(decode.int))
     use author_login <- decode.field(11, decode.optional(decode.string))
+    use closed_by <- decode.field(12, decode.optional(decode.string))
     decode.success(ListItemsRow(
       github_id:,
       number:,
@@ -831,6 +855,7 @@ pub fn list_items(
       github_updated_at:,
       duplicate_of_number:,
       author_login:,
+      closed_by:,
     ))
   }
 
@@ -1027,6 +1052,30 @@ pub fn set_author(
 
   "UPDATE items
 SET author_login = $2
+WHERE github_id = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.text(arg_2))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Runs the `set_closed_by` query
+/// defined in `./src/database/sql/set_closed_by.sql`.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn set_closed_by(
+  db: pog.Connection,
+  arg_1: Int,
+  arg_2: String,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "UPDATE items
+SET closed_by = $2
 WHERE github_id = $1;
 "
   |> pog.query

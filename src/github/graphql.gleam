@@ -7,8 +7,8 @@ import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{type Option}
+import gleam/regexp
 import gleam/result
-import gleam/string
 import gleam/time/duration
 import gleam/time/timestamp.{type Timestamp}
 import squall
@@ -61,10 +61,26 @@ pub fn list_items(
                       createdAt
                   }
               }
-              timelineItems(itemTypes: CONVERTED_TO_DISCUSSION_EVENT, last: 1) {
+              conversion: timelineItems(itemTypes: CONVERTED_TO_DISCUSSION_EVENT, last: 1) {
                   nodes {
                       ... on ConvertedToDiscussionEvent {
                           discussion { number }
+                      }
+                  }
+              }
+              closure: timelineItems(itemTypes: CLOSED_EVENT, last: 1) {
+                  nodes {
+                      ... on ClosedEvent {
+                          actor { login }
+                      }
+                  }
+              }
+              markedDup: timelineItems(itemTypes: MARKED_AS_DUPLICATE_EVENT, last: 1) {
+                  nodes {
+                      ... on MarkedAsDuplicateEvent {
+                          canonical {
+                              ... on Issue { number }
+                          }
                       }
                   }
               }
@@ -99,6 +115,11 @@ pub type BackfillItem {
     // Surfaced alongside the item in the dashboard so same-author refilings
     // pop visually without changing the underlying ranking.
     author_login: Option(String),
+    // The login of the actor that closed the item, or None for items that
+    // are open (no close event) or for items whose closer was a ghost user.
+    // Captured from the ClosedEvent timeline entry — for discussions this
+    // is always None because the Discussion type has no timelineItems.
+    closed_by: Option(String),
   )
 }
 
@@ -118,14 +139,19 @@ fn list_items_response_decoder() -> decode.Decoder(ListItemsResponse) {
 
 fn backfill_item_decoder() -> decode.Decoder(BackfillItem) {
   use item <- decode.then(types.issue_decoder())
-  // Two independent signals for the canonical pointer:
-  //   - ConvertedToDiscussionEvent (structured, authoritative) — fires when
-  //     a maintainer used GitHub's "convert to discussion" button.
-  //   - bo0tzz dupe-pattern comment near the close event (heuristic) — the
-  //     manual workflow.
-  // In practice these are mutually exclusive (you don't comment '#NNN' on a
-  // converted issue), but if both fire, conversion wins.
+  // Three independent signals for the canonical pointer, in precedence order:
+  //   1. ConvertedToDiscussionEvent — the issue was converted to a discussion,
+  //      that discussion *is* the canonical entity going forward.
+  //   2. MarkedAsDuplicateEvent — maintainer used GitHub's "Mark as duplicate"
+  //      UI dropdown. Structured, has canonical.number directly. The 'lazy
+  //      close' path that doesn't leave a parseable comment.
+  //   3. Maintainer dupe-pattern comment near close time — the original
+  //      manual workflow, parsed heuristically.
+  // 1 and 2 are mutually exclusive in practice (you don't both convert and
+  // mark as duplicate). Comment-based ref is the fallback for older closures
+  // and for maintainers who left a comment without using the UI button.
   use converted_to <- decode.then(converted_to_discussion_decoder())
+  use marked_dup <- decode.then(marked_as_duplicate_decoder())
   use closed_at <- decode.optional_field(
     "closedAt",
     option.None,
@@ -133,11 +159,18 @@ fn backfill_item_decoder() -> decode.Decoder(BackfillItem) {
   )
   use comment_ref <- decode.then(duplicate_of_decoder(closed_at))
   use author_login <- decode.then(author_login_decoder())
-  let duplicate_of_number = case converted_to {
-    option.Some(_) -> converted_to
-    option.None -> comment_ref
+  use closed_by <- decode.then(closed_by_decoder())
+  let duplicate_of_number = case converted_to, marked_dup, comment_ref {
+    option.Some(_), _, _ -> converted_to
+    _, option.Some(_), _ -> marked_dup
+    _, _, _ -> comment_ref
   }
-  decode.success(BackfillItem(item:, duplicate_of_number:, author_login:))
+  decode.success(BackfillItem(
+    item:,
+    duplicate_of_number:,
+    author_login:,
+    closed_by:,
+  ))
 }
 
 // GitHub's GraphQL author field is null for ghost (deleted) accounts. Use
@@ -168,7 +201,61 @@ fn converted_to_discussion_decoder() -> decode.Decoder(Option(Int)) {
     }
   }
   use timeline <- decode.optional_field(
-    "timelineItems",
+    "conversion",
+    option.None,
+    decode.optional(nodes_decoder),
+  )
+  decode.success(option.flatten(timeline))
+}
+
+// MarkedAsDuplicateEvent.canonical — the canonical Issue (or PR) the
+// maintainer pointed this item to via GitHub's UI dropdown. We only accept
+// Issue canonicals because PRs aren't in our items table. Returns None when
+// the field isn't an Issue, or when no such event fired.
+fn marked_as_duplicate_decoder() -> decode.Decoder(Option(Int)) {
+  let event_decoder = {
+    use number <- decode.optional_field(
+      "canonical",
+      option.None,
+      decode.optional(decode.at(["number"], decode.int)),
+    )
+    decode.success(number)
+  }
+  let nodes_decoder = {
+    use nodes <- decode.field("nodes", decode.list(event_decoder))
+    case nodes {
+      [first, ..] -> decode.success(first)
+      [] -> decode.success(option.None)
+    }
+  }
+  use timeline <- decode.optional_field(
+    "markedDup",
+    option.None,
+    decode.optional(nodes_decoder),
+  )
+  decode.success(option.flatten(timeline))
+}
+
+// ClosedEvent.actor.login. Returns None when the item was never closed
+// (no event), or when the closer is a ghost (deleted) user (actor: null).
+fn closed_by_decoder() -> decode.Decoder(Option(String)) {
+  let event_decoder = {
+    use actor <- decode.optional_field(
+      "actor",
+      option.None,
+      decode.optional(decode.at(["login"], decode.string)),
+    )
+    decode.success(actor)
+  }
+  let nodes_decoder = {
+    use nodes <- decode.field("nodes", decode.list(event_decoder))
+    case nodes {
+      [first, ..] -> decode.success(first)
+      [] -> decode.success(option.None)
+    }
+  }
+  use timeline <- decode.optional_field(
+    "closure",
     option.None,
     decode.optional(nodes_decoder),
   )
@@ -231,6 +318,13 @@ fn duplicate_of_decoder(
 // issue might be related) that aren't authoritative.
 const close_alignment_window_seconds = 300.0
 
+// Bot-closure detection uses a wider window than the maintainer-comment
+// path. The bot is an automated workflow with queue latency: most closures
+// fire within seconds but a long tail can drift to tens of minutes. 30
+// minutes captures ~99% of bot closures on the existing data without risk
+// of false matches (the bot only ever posts one closure comment per item).
+const bot_alignment_window_seconds = 1800.0
+
 fn pick_closest_to_close(
   close_at: Option(Timestamp),
   candidates: List(#(Timestamp, Int)),
@@ -266,42 +360,77 @@ fn timestamp_decoder() -> decode.Decoder(Timestamp) {
   }
 }
 
-// Parse a comment body for a dupe pointer like '#NNN'. We accept the bare
-// form ('#992') and a small set of known prefixes ('Duplicate of #992',
-// 'Dupe of #992', 'Now tracked in #992') with optional trailing period —
-// these are the phrasings the maintainer actually uses. We deliberately
-// don't try to extract '#NNN' from arbitrary prose because comments often
-// reference related-but-not-canonical PRs/issues ('see #123', 'fix in
-// #123'), which would poison the dupe graph.
+// Parse a comment body for a dupe pointer like '#NNN'. Two paths, in order:
+//
+//   1. Bare '#NNN' as the whole comment (after strip_dupe_prefix). Kept
+//      strict — the comment must BE the pointer, no surrounding prose. A
+//      mid-comment '#123' (e.g. 'unrelated context #123') is too noisy.
+//
+//   2. A known dupe-of phrase ('duplicate of', 'dupe of', 'tracked in',
+//      'covered by', 'same as') followed by '#NNN', anywhere in the body.
+//      Maintainers commonly write 'I think this is a duplicate of #N' or
+//      'Thanks, tracked in #N' — narrative prose around the phrase is fine.
+//      Patterns picked from sampling the 598 lazy-close issues; phrasings
+//      that point at PRs ('fixed by', 'merged into') or signal relates-to
+//      ('blocked by', 'see also') are deliberately excluded — they'd
+//      pollute the dupe graph with non-canonical references.
 fn parse_dupe_ref(body: String) -> Option(Int) {
-  let trimmed = string.trim(body)
-  let core = trimmed |> strip_dupe_prefix |> string.trim
-  case core {
-    "#" <> rest -> {
-      let digits = rest |> string.trim |> trim_trailing_period
+  case parse_bare_ref(body) {
+    option.Some(n) -> option.Some(n)
+    option.None -> parse_phrase_ref(body)
+  }
+}
+
+// Match any line that consists of just '#NNN' (optional trailing period,
+// optional surrounding whitespace). Maintainers commonly place the
+// canonical pointer on its own line — at the start ('#NNN\n\n<lecture>'),
+// at the end ('<context>\n\n#NNN'), or as the whole body. We don't pick
+// up '#NNN' mid-prose because that's too prone to false positives ('this
+// might be related to #123 but actually...').
+fn bare_ref_regex() -> regexp.Regexp {
+  let assert Ok(re) =
+    regexp.compile(
+      "^\\s*#(\\d+)\\.?\\s*$",
+      regexp.Options(case_insensitive: False, multi_line: True),
+    )
+  re
+}
+
+fn parse_bare_ref(body: String) -> Option(Int) {
+  case regexp.scan(bare_ref_regex(), body) {
+    [regexp.Match(_, [option.Some(digits), ..]), ..] ->
       case int.parse(digits) {
         Ok(n) -> option.Some(n)
         Error(_) -> option.None
       }
-    }
     _ -> option.None
   }
 }
 
-fn strip_dupe_prefix(text: String) -> String {
-  case string.lowercase(text) {
-    "duplicate of " <> _ -> string.drop_start(text, 13)
-    "dupe of " <> _ -> string.drop_start(text, 8)
-    "now tracked in " <> _ -> string.drop_start(text, 15)
-    "closing as duplicate of " <> _ -> string.drop_start(text, 24)
-    _ -> text
-  }
+// Compiled once at first use; the assertion is fine because the pattern is
+// a constant. Captures the trigger phrase (group 1, unused) and the digit
+// sequence (group 2).
+fn dupe_phrase_regex() -> regexp.Regexp {
+  let assert Ok(re) =
+    regexp.compile(
+      "(duplicate of|dupe of|tracked in|covered by|same as)\\s+#(\\d+)\\b",
+      regexp.Options(case_insensitive: True, multi_line: True),
+    )
+  re
 }
 
-fn trim_trailing_period(s: String) -> String {
-  case string.ends_with(s, ".") {
-    True -> string.drop_end(s, 1)
-    False -> s
+fn parse_phrase_ref(body: String) -> Option(Int) {
+  case regexp.scan(dupe_phrase_regex(), body) {
+    [regexp.Match(_, submatches), ..] ->
+      case submatches {
+        [_, option.Some(digits)] ->
+          case int.parse(digits) {
+            Ok(n) -> option.Some(n)
+            Error(_) -> option.None
+          }
+        _ -> option.None
+      }
+    _ -> option.None
   }
 }
 
@@ -388,7 +517,86 @@ fn discussion_backfill_decoder() -> decode.Decoder(BackfillItem) {
   )
   use duplicate_of_number <- decode.then(duplicate_of_decoder(closed_at))
   use author_login <- decode.then(author_login_decoder())
-  decode.success(BackfillItem(item:, duplicate_of_number:, author_login:))
+  // Discussions have no timelineItems on the GitHub GraphQL API, so we
+  // recover the closer from the bot's own closure comment instead. The
+  // immich auto-dupe bot posts as `github-actions` near the close timestamp
+  // with a fixed wording; matching that gives us the closer we can't read
+  // off ClosedEvent.actor. Returns None when no such comment is present.
+  use closed_by <- decode.then(bot_comment_closer_decoder(closed_at))
+  decode.success(BackfillItem(
+    item:,
+    duplicate_of_number:,
+    author_login:,
+    closed_by:,
+  ))
+}
+
+// github-actions is the bot login for the immich auto-dupe-closer. Anchored
+// to close time the same way duplicate_of_decoder is, so we don't pick up
+// unrelated github-actions activity (label runs, etc.) far from the close.
+fn bot_comment_closer_decoder(
+  close_at: Option(Timestamp),
+) -> decode.Decoder(Option(String)) {
+  let comment_decoder = {
+    use login <- decode.optional_field(
+      "author",
+      option.None,
+      decode.optional(decode.at(["login"], decode.string)),
+    )
+    use created_at <- decode.field("createdAt", timestamp_decoder())
+    case login {
+      option.Some("github-actions") ->
+        decode.success(option.Some(#(created_at, "github-actions")))
+      _ -> decode.success(option.None)
+    }
+  }
+
+  let comments_decoder = {
+    use nodes <- decode.field("nodes", decode.list(comment_decoder))
+    let matches =
+      list.filter_map(nodes, fn(x) {
+        case x {
+          option.Some(v) -> Ok(v)
+          option.None -> Error(Nil)
+        }
+      })
+    let picked = pick_closest_string_to_close(close_at, matches)
+    decode.success(picked)
+  }
+
+  use comments <- decode.optional_field(
+    "comments",
+    option.None,
+    decode.optional(comments_decoder),
+  )
+  decode.success(option.flatten(comments))
+}
+
+fn pick_closest_string_to_close(
+  close_at: Option(Timestamp),
+  candidates: List(#(Timestamp, String)),
+) -> Option(String) {
+  case close_at {
+    option.None -> option.None
+    option.Some(ct) -> {
+      candidates
+      |> list.filter_map(fn(pair) {
+        let #(t, v) = pair
+        let delta =
+          timestamp.difference(ct, t)
+          |> duration.to_seconds
+          |> float.absolute_value
+        case delta <=. bot_alignment_window_seconds {
+          True -> Ok(#(delta, v))
+          False -> Error(Nil)
+        }
+      })
+      |> list.sort(fn(a, b) { float.compare(a.0, b.0) })
+      |> list.first
+      |> result.map(fn(p) { p.1 })
+      |> option.from_result
+    }
+  }
 }
 
 pub type PageInfo {
