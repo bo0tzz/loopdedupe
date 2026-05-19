@@ -93,6 +93,12 @@ fn backfill_triggers() -> String {
 }
 
 fn backfill_status_block(status: Option(sql.BackfillStatusRow)) -> String {
+  let chains = case status {
+    option.None -> ""
+    option.Some(s) ->
+      chain_progress("issues backfill", s.backfill_chain_pages, s.backfill_chain_age_seconds, s.total_issues, s.backfill_pending + s.backfill_executing)
+      <> chain_progress("discussions backfill", s.discussion_chain_pages, s.discussion_chain_age_seconds, s.total_discussions, s.discussion_pending + s.discussion_executing)
+  }
   let rows = case status {
     option.None -> "<tr><td colspan=\"5\"><em>status unavailable</em></td></tr>"
     option.Some(s) ->
@@ -111,12 +117,76 @@ fn backfill_status_block(status: Option(sql.BackfillStatusRow)) -> String {
       <> ". An incremental walk would resume from these boundaries.</p>"
   }
   "<div id=\"backfill-status\" hx-get=\"/backfills/status\" hx-trigger=\"every 2s\" hx-swap=\"outerHTML\">"
+  <> chains
   <> "<h3>Queue status</h3>"
   <> "<table class=\"queue-status\"><thead><tr><th>queue</th><th>pending</th><th>executing</th><th>succeeded (5m)</th><th>failed (5m)</th></tr></thead><tbody>"
   <> rows
   <> "</tbody></table>"
   <> footer
   <> "</div>"
+}
+
+// Renders an inline progress bar when a chain is active. 'In flight' is
+// pending+executing — pages already enqueued but not yet done. The
+// total-page estimate assumes ~100 items per page (the GraphQL page size).
+// For an incremental walk this overestimates since most pages will fall
+// outside the since-window; in practice the chain ends faster than the
+// total predicts, which is the right kind of error to make.
+fn chain_progress(label: String, pages: Int, age_s: Int, total_items: Int, in_flight: Int) -> String {
+  case pages > 0 || in_flight > 0 {
+    False -> ""
+    True -> {
+      let estimated_total = case total_items / 100 {
+        n if n < 1 -> 1
+        n -> n + 1
+      }
+      let elapsed = format_duration(age_s)
+      let eta = case pages > 0, age_s > 0 {
+        True, True -> {
+          let remaining = estimated_total - pages
+          case remaining > 0 {
+            True -> {
+              // age_s seconds for `pages` pages → seconds/page = age_s / pages
+              let eta_s = remaining * age_s / pages
+              " · ~" <> format_duration(eta_s) <> " remaining"
+            }
+            False -> ""
+          }
+        }
+        _, _ -> ""
+      }
+      let percent = case pages * 100 / estimated_total {
+        p if p > 100 -> 100
+        p -> p
+      }
+      "<div class=\"chain\"><div class=\"chain-label\">"
+      <> escape(label)
+      <> ": page "
+      <> int.to_string(pages)
+      <> " / ~"
+      <> int.to_string(estimated_total)
+      <> " · "
+      <> escape(elapsed)
+      <> " elapsed"
+      <> escape(eta)
+      <> case in_flight > 0 {
+        True -> " · " <> int.to_string(in_flight) <> " in flight"
+        False -> ""
+      }
+      <> "</div><div class=\"chain-bar\"><div class=\"chain-fill\" style=\"width: "
+      <> int.to_string(percent)
+      <> "%\"></div></div></div>"
+    }
+  }
+}
+
+fn format_duration(seconds: Int) -> String {
+  case seconds {
+    s if s < 60 -> int.to_string(s) <> "s"
+    s if s < 3600 ->
+      int.to_string(s / 60) <> "m " <> int.to_string(s % 60) <> "s"
+    s -> int.to_string(s / 3600) <> "h " <> int.to_string({ s % 3600 } / 60) <> "m"
+  }
 }
 
 fn queue_row(name: String, pending: Int, executing: Int, succeeded: Int, failed: Int) -> String {
@@ -336,6 +406,11 @@ fn style_block() -> String {
     @media (prefers-color-scheme: dark) { .queue-status td.live { color: #6cf; } }
     .queue-status td.fail { color: #c33; font-weight: 600; }
     @media (prefers-color-scheme: dark) { .queue-status td.fail { color: #f88; } }
+    .chain { max-width: 700px; margin: 0.6em 0; font-variant-numeric: tabular-nums; }
+    .chain-label { font-size: 0.9em; margin-bottom: 0.25em; }
+    .chain-bar { height: 6px; background: rgba(120, 120, 120, 0.15); border-radius: 3px; overflow: hidden; }
+    .chain-fill { height: 100%; background: #06c; transition: width 0.3s ease; }
+    @media (prefers-color-scheme: dark) { .chain-fill { background: #6cf; } }
   </style>"
 }
 
