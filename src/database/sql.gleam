@@ -9,6 +9,118 @@ import gleam/option.{type Option}
 import gleam/time/timestamp.{type Timestamp}
 import pog
 
+/// A row you get from running the `backfill_status` query
+/// defined in `./src/database/sql/backfill_status.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type BackfillStatusRow {
+  BackfillStatusRow(
+    backfill_pending: Int,
+    backfill_executing: Int,
+    backfill_recent_succeeded: Int,
+    backfill_recent_failed: Int,
+    discussion_pending: Int,
+    discussion_executing: Int,
+    discussion_recent_succeeded: Int,
+    discussion_recent_failed: Int,
+    embeddings_pending: Int,
+    embeddings_executing: Int,
+    embeddings_recent_succeeded: Int,
+    embeddings_recent_failed: Int,
+    similarity_pending: Int,
+    similarity_executing: Int,
+    similarity_recent_succeeded: Int,
+    similarity_recent_failed: Int,
+    latest_issue_update: Timestamp,
+    latest_discussion_update: Timestamp,
+  )
+}
+
+/// One-row summary of the backfill pipeline state for the /backfills page.
+/// 'Recent' = jobs that finished in the last 5 minutes; gives a sense of
+/// whether the chain is actively churning.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn backfill_status(
+  db: pog.Connection,
+) -> Result(pog.Returned(BackfillStatusRow), pog.QueryError) {
+  let decoder = {
+    use backfill_pending <- decode.field(0, decode.int)
+    use backfill_executing <- decode.field(1, decode.int)
+    use backfill_recent_succeeded <- decode.field(2, decode.int)
+    use backfill_recent_failed <- decode.field(3, decode.int)
+    use discussion_pending <- decode.field(4, decode.int)
+    use discussion_executing <- decode.field(5, decode.int)
+    use discussion_recent_succeeded <- decode.field(6, decode.int)
+    use discussion_recent_failed <- decode.field(7, decode.int)
+    use embeddings_pending <- decode.field(8, decode.int)
+    use embeddings_executing <- decode.field(9, decode.int)
+    use embeddings_recent_succeeded <- decode.field(10, decode.int)
+    use embeddings_recent_failed <- decode.field(11, decode.int)
+    use similarity_pending <- decode.field(12, decode.int)
+    use similarity_executing <- decode.field(13, decode.int)
+    use similarity_recent_succeeded <- decode.field(14, decode.int)
+    use similarity_recent_failed <- decode.field(15, decode.int)
+    use latest_issue_update <- decode.field(16, pog.timestamp_decoder())
+    use latest_discussion_update <- decode.field(17, pog.timestamp_decoder())
+    decode.success(BackfillStatusRow(
+      backfill_pending:,
+      backfill_executing:,
+      backfill_recent_succeeded:,
+      backfill_recent_failed:,
+      discussion_pending:,
+      discussion_executing:,
+      discussion_recent_succeeded:,
+      discussion_recent_failed:,
+      embeddings_pending:,
+      embeddings_executing:,
+      embeddings_recent_succeeded:,
+      embeddings_recent_failed:,
+      similarity_pending:,
+      similarity_executing:,
+      similarity_recent_succeeded:,
+      similarity_recent_failed:,
+      latest_issue_update:,
+      latest_discussion_update:,
+    ))
+  }
+
+  "-- One-row summary of the backfill pipeline state for the /backfills page.
+-- 'Recent' = jobs that finished in the last 5 minutes; gives a sense of
+-- whether the chain is actively churning.
+SELECT
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'backfill'            AND status = 'pending')                                                                                  AS backfill_pending,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'backfill'            AND status = 'executing')                                                                                AS backfill_executing,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'backfill'            AND status = 'succeeded' AND finished_at >= NOW() - INTERVAL '5 minutes')                                AS backfill_recent_succeeded,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'backfill'            AND status = 'failed'    AND finished_at >= NOW() - INTERVAL '5 minutes')                                AS backfill_recent_failed,
+
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'discussion_backfill' AND status = 'pending')                                                                                  AS discussion_pending,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'discussion_backfill' AND status = 'executing')                                                                                AS discussion_executing,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'discussion_backfill' AND status = 'succeeded' AND finished_at >= NOW() - INTERVAL '5 minutes')                                AS discussion_recent_succeeded,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'discussion_backfill' AND status = 'failed'    AND finished_at >= NOW() - INTERVAL '5 minutes')                                AS discussion_recent_failed,
+
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'embeddings'          AND status = 'pending')                                                                                  AS embeddings_pending,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'embeddings'          AND status = 'executing')                                                                                AS embeddings_executing,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'embeddings'          AND status = 'succeeded' AND finished_at >= NOW() - INTERVAL '5 minutes')                                AS embeddings_recent_succeeded,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'embeddings'          AND status = 'failed'    AND finished_at >= NOW() - INTERVAL '5 minutes')                                AS embeddings_recent_failed,
+
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'similarity'          AND status = 'pending')                                                                                  AS similarity_pending,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'similarity'          AND status = 'executing')                                                                                AS similarity_executing,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'similarity'          AND status = 'succeeded' AND finished_at >= NOW() - INTERVAL '5 minutes')                                AS similarity_recent_succeeded,
+  (SELECT COUNT(*) FROM m25.job WHERE queue_name = 'similarity'          AND status = 'failed'    AND finished_at >= NOW() - INTERVAL '5 minutes')                                AS similarity_recent_failed,
+
+  (SELECT MAX(github_updated_at) FROM items WHERE item_type = 'issue')                                                                                                            AS latest_issue_update,
+  (SELECT MAX(github_updated_at) FROM items WHERE item_type = 'discussion')                                                                                                       AS latest_discussion_update;
+"
+  |> pog.query
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// Runs the `clear_author` query
 /// defined in `./src/database/sql/clear_author.sql`.
 ///

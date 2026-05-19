@@ -42,6 +42,8 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
     Post, ["api", "judgments", "undo"] ->
       dashboard.undo_pair_judgment(req, ctx)
     Get, ["judgments"] -> dashboard.judgments(ctx)
+    Get, ["backfills"] -> dashboard.backfills(ctx)
+    Get, ["backfills", "status"] -> dashboard.backfills_status_fragment(ctx)
     Get, [] -> dashboard.index(ctx)
     Get, ["dashboard", "stats"] -> dashboard.stats_fragment(ctx)
     Get, ["items", id] -> dashboard.item_detail(ctx, id)

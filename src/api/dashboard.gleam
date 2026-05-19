@@ -56,6 +56,87 @@ pub fn stats_fragment(ctx: Context) -> Response {
 // 'not_duplicate' judgment, return empty body. The pair's <tr> has
 // hx-swap='delete' which removes the row visually. The dashboard query
 // filters out judged pairs so the dismissal sticks across reloads.
+pub fn backfills(ctx: Context) -> Response {
+  let status = case sql.backfill_status(ctx.db) {
+    Ok(pog.Returned(_, [row])) -> option.Some(row)
+    _ -> option.None
+  }
+  let body =
+    page("loopdedupe · backfills", [
+      "<header-link><a href=\"/\">← back to dashboard</a></header-link>",
+      "<h2>Backfills</h2>",
+      "<p class=\"muted\">Manually kick off a walk of the GitHub corpus. Incremental walks only items updated since the latest <code>github_updated_at</code> we have stored. Full walks restart from the first page.</p>",
+      backfill_triggers(),
+      backfill_status_block(status),
+    ])
+  wisp.html_response(body, 200)
+}
+
+pub fn backfills_status_fragment(ctx: Context) -> Response {
+  let status = case sql.backfill_status(ctx.db) {
+    Ok(pog.Returned(_, [row])) -> option.Some(row)
+    _ -> option.None
+  }
+  wisp.html_response(backfill_status_block(status), 200)
+}
+
+// Three trigger buttons. The response from each existing endpoint is plain
+// text (e.g. 'backfill started — issues since ...'); we route it into the
+// flash slot so the maintainer can see what was actually triggered.
+fn backfill_triggers() -> String {
+  "<section class=\"backfill-triggers\">
+    <button class=\"trigger\" hx-post=\"/api/backfill/incremental\" hx-target=\"#flash\" hx-swap=\"innerHTML\">incremental (since latest)</button>
+    <button class=\"trigger\" hx-post=\"/api/backfill\"             hx-target=\"#flash\" hx-swap=\"innerHTML\">full issues</button>
+    <button class=\"trigger\" hx-post=\"/api/backfill/discussions\" hx-target=\"#flash\" hx-swap=\"innerHTML\">full discussions</button>
+    <div id=\"flash\" class=\"flash\"></div>
+  </section>"
+}
+
+fn backfill_status_block(status: Option(sql.BackfillStatusRow)) -> String {
+  let rows = case status {
+    option.None -> "<tr><td colspan=\"5\"><em>status unavailable</em></td></tr>"
+    option.Some(s) ->
+      queue_row("issues backfill", s.backfill_pending, s.backfill_executing, s.backfill_recent_succeeded, s.backfill_recent_failed)
+      <> queue_row("discussions backfill", s.discussion_pending, s.discussion_executing, s.discussion_recent_succeeded, s.discussion_recent_failed)
+      <> queue_row("embeddings", s.embeddings_pending, s.embeddings_executing, s.embeddings_recent_succeeded, s.embeddings_recent_failed)
+      <> queue_row("similarity", s.similarity_pending, s.similarity_executing, s.similarity_recent_succeeded, s.similarity_recent_failed)
+  }
+  let footer = case status {
+    option.None -> ""
+    option.Some(s) ->
+      "<p class=\"muted\">Latest <code>github_updated_at</code> stored — issues: "
+      <> escape(format_datetime(s.latest_issue_update))
+      <> " · discussions: "
+      <> escape(format_datetime(s.latest_discussion_update))
+      <> ". An incremental walk would resume from these boundaries.</p>"
+  }
+  "<div id=\"backfill-status\" hx-get=\"/backfills/status\" hx-trigger=\"every 2s\" hx-swap=\"outerHTML\">"
+  <> "<h3>Queue status</h3>"
+  <> "<table class=\"queue-status\"><thead><tr><th>queue</th><th>pending</th><th>executing</th><th>succeeded (5m)</th><th>failed (5m)</th></tr></thead><tbody>"
+  <> rows
+  <> "</tbody></table>"
+  <> footer
+  <> "</div>"
+}
+
+fn queue_row(name: String, pending: Int, executing: Int, succeeded: Int, failed: Int) -> String {
+  "<tr><td>"
+  <> escape(name)
+  <> "</td><td>"
+  <> int.to_string(pending)
+  <> "</td><td class=\""
+  <> case executing > 0 { True -> "live" False -> "" }
+  <> "\">"
+  <> int.to_string(executing)
+  <> "</td><td>"
+  <> int.to_string(succeeded)
+  <> "</td><td class=\""
+  <> case failed > 0 { True -> "fail" False -> "" }
+  <> "\">"
+  <> int.to_string(failed)
+  <> "</td></tr>"
+}
+
 pub fn judgments(ctx: Context) -> Response {
   let rows = case sql.list_judgments(ctx.db) {
     Ok(pog.Returned(_, r)) -> r
@@ -186,6 +267,7 @@ fn page(title: String, sections: List(String)) -> String {
   <> "<script src=\"https://unpkg.com/htmx.org@1.9.10\"></script>"
   <> "</head><body><header><a href=\"/\"><strong>loopdedupe</strong></a>"
   <> " <a href=\"/judgments\" class=\"nav-link\">judgments</a>"
+  <> " <a href=\"/backfills\" class=\"nav-link\">backfills</a>"
   <> "</header><main>"
   <> string.concat(sections)
   <> "</main></body></html>"
@@ -243,6 +325,17 @@ fn style_block() -> String {
     .item-body { white-space: pre-wrap; background: #f6f6f6; padding: 1em; border-radius: 6px; }
     @media (prefers-color-scheme: dark) { .item-body, .kind { background: #222; color: #eee; } .kind-discussion { background: #2e5b35; } }
     a { color: #06c; }
+    .backfill-triggers { display: flex; flex-wrap: wrap; gap: 0.6em; align-items: center; margin: 1em 0 2em; }
+    .backfill-triggers .trigger { padding: 0.5em 0.9em; font-size: 0.95em; border: 1px solid #888; background: transparent; color: inherit; border-radius: 4px; cursor: pointer; }
+    .backfill-triggers .trigger:hover { background: rgba(0, 100, 200, 0.08); border-color: #06c; }
+    @media (prefers-color-scheme: dark) { .backfill-triggers .trigger:hover { background: rgba(120, 180, 255, 0.12); } }
+    .backfill-triggers .flash { flex-basis: 100%; font-size: 0.9em; opacity: 0.75; font-family: ui-monospace, monospace; }
+    .queue-status { max-width: 700px; font-variant-numeric: tabular-nums; }
+    .queue-status td:not(:first-child), .queue-status th:not(:first-child) { text-align: right; padding-right: 1.2em; }
+    .queue-status td.live { color: #06c; font-weight: 600; }
+    @media (prefers-color-scheme: dark) { .queue-status td.live { color: #6cf; } }
+    .queue-status td.fail { color: #c33; font-weight: 600; }
+    @media (prefers-color-scheme: dark) { .queue-status td.fail { color: #f88; } }
   </style>"
 }
 
@@ -536,6 +629,12 @@ fn format_similarity(s: Float) -> String {
 fn format_date(t: Timestamp) -> String {
   // YYYY-MM-DD slice of RFC3339 — good enough for a sortable, scannable list.
   timestamp.to_rfc3339(t, duration.seconds(0)) |> string.slice(0, 10)
+}
+
+fn format_datetime(t: Timestamp) -> String {
+  // YYYY-MM-DD HH:MM slice — used where minute-level resolution matters
+  // (e.g. 'latest update' freshness on the backfills page).
+  timestamp.to_rfc3339(t, duration.seconds(0)) |> string.slice(0, 16)
 }
 
 fn escape(s: String) -> String {
