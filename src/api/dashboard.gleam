@@ -411,6 +411,16 @@ fn style_block() -> String {
     .chain-bar { height: 6px; background: rgba(120, 120, 120, 0.15); border-radius: 3px; overflow: hidden; }
     .chain-fill { height: 100%; background: #06c; transition: width 0.3s ease; }
     @media (prefers-color-scheme: dark) { .chain-fill { background: #6cf; } }
+    .confidence-row td { font-size: 0.85em; padding: 0.4em 0.6em; border-bottom: 1px solid #eee; }
+    @media (prefers-color-scheme: dark) { .confidence-row td { border-color: #333; } }
+    .confidence-label { text-transform: uppercase; font-size: 0.75em; letter-spacing: 0.05em; opacity: 0.75; margin-right: 0.3em; }
+    .confidence-gap { opacity: 0.6; font-size: 0.9em; margin-left: 0.2em; }
+    .confidence-strong td { color: #393; }
+    @media (prefers-color-scheme: dark) { .confidence-strong td { color: #8e8; } }
+    .confidence-moderate td { color: #b5651d; }
+    @media (prefers-color-scheme: dark) { .confidence-moderate td { color: #f6c873; } }
+    .confidence-weak td { color: #c33; }
+    @media (prefers-color-scheme: dark) { .confidence-weak td { color: #f88; } }
   </style>"
 }
 
@@ -649,20 +659,51 @@ fn candidates_table(items: List(github.SuggestedDuplicate)) -> String {
     _ ->
       "<table><thead><tr><th>Sim</th><th>Candidate</th></tr></thead><tbody>"
       <> {
-        list.map(items, fn(c) {
-          "<tr><td class=\"similarity\">"
-          <> format_similarity(c.similarity)
-          <> "</td><td><a class=\""
-          <> state_class_github(c.state, c.state_reason)
-          <> "\" href=\"/items/"
-          <> int.to_string(c.github_id)
-          <> "\">"
-          <> escape(c.title)
-          <> "</a></td></tr>"
-        })
-        |> string.concat()
+        let banner = confidence_banner(items)
+        let rows =
+          list.map(items, fn(c) {
+            "<tr><td class=\"similarity\">"
+            <> format_similarity(c.similarity)
+            <> "</td><td><a class=\""
+            <> state_class_github(c.state, c.state_reason)
+            <> "\" href=\"/items/"
+            <> int.to_string(c.github_id)
+            <> "\">"
+            <> escape(c.title)
+            <> "</a></td></tr>"
+          })
+          |> string.concat()
+        banner <> rows
       }
       <> "</tbody></table>"
+  }
+}
+
+// Confidence is the gap between rank 1 and rank 2 rerank scores, not the
+// absolute score. With a sparse canonical or several semantically-similar
+// candidates the rerank model spreads probability and no single item gets
+// a high score — but a large gap to the next candidate means the top pick
+// is unambiguous. Empirically (sampled from a week of closures) a gap of
+// ~0.10 = confidently the one; < 0.05 = real ambiguity worth eyeballing
+// the next few.
+fn confidence_banner(items: List(github.SuggestedDuplicate)) -> String {
+  case items {
+    [first, second, ..] -> {
+      let gap = first.similarity -. second.similarity
+      let #(label, css_class) = case gap {
+        g if g >=. 0.10 -> #("strong", "confidence-strong")
+        g if g >=. 0.05 -> #("moderate", "confidence-moderate")
+        _ -> #("weak — top candidates are close", "confidence-weak")
+      }
+      "<tr class=\"confidence-row "
+      <> css_class
+      <> "\"><td colspan=\"2\"><span class=\"confidence-label\">confidence</span> "
+      <> escape(label)
+      <> " <span class=\"confidence-gap\">(rank 1 leads by "
+      <> format_similarity(gap)
+      <> ")</span></td></tr>"
+    }
+    _ -> ""
   }
 }
 
