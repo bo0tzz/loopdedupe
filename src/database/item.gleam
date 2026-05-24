@@ -1,5 +1,4 @@
 import database/sql
-import embeddings/strip
 import embeddings/voyage
 import github/types
 import gleam/int
@@ -284,8 +283,17 @@ fn rerank_candidates(
   }
 }
 
+// Rerank gets raw body (template scaffolding included). Counter-intuitive
+// but benched (N=81 on captured ground truth): leaving the template in
+// gains ~4pp rank-1 hit rate, ~5pp top-3, and ~5pp absolute score
+// (median 0.832 vs 0.781) over stripping. rerank-2.5 apparently uses the
+// template structure as a 'these are both feature-request forms' signal
+// rather than being distracted by it. The cosine-retrieval step still
+// strips because cosine over template-noisy text inflates structural
+// similarity between unrelated items — a different problem with the
+// opposite right answer.
 fn build_text(title: String, body: String) -> String {
-  title <> "\n\n" <> strip.strip_template(body)
+  title <> "\n\n" <> body
 }
 
 fn apply_rerank(
