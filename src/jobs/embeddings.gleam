@@ -1,6 +1,5 @@
 import database/embeddings
 import database/item
-import embeddings/strip
 import embeddings/voyage
 import gleam/dynamic/decode
 import gleam/int
@@ -90,20 +89,15 @@ pub fn handle_embeddings_job(
     |> result.map_error(fn(s) { EmbeddingsJobError(snag.line_print(s)) }),
   )
 
-  // Empirically-tuned input format for E5-Mistral-7B (see commit message):
-  //   - The </s> terminator is required for last-token pooling to read the
-  //     embedding off a stable position. Without it the pooled vector
-  //     samples whatever token the body trails into (template tail, code
-  //     fence, whitespace), and everything collapses to a narrow cone
-  //     where unrelated issues sit at ~97% similarity.
-  //   - Raw body content actively hurts discrimination because immich's
-  //     issue template makes most bodies look ~85% identical at the token
-  //     level ('### Reproduction steps', version stacks, etc.). Stripping
-  //     the template scaffolding recovers most of the body's real signal.
-  // Voyage handles its own input formatting internally, but stripping the
-  // template noise is still worth it — less to embed, less prompt cost, and
-  // the body's actual prose is what we want to compare on.
-  let embed_text = item.title <> "\n\n" <> strip.strip_template(item.body)
+  // Raw body input. Stripping the template was tuned for E5-Mistral-7B
+  // (and we then carried it forward into voyage-3-large), where template
+  // overlap collapsed unrelated issues into a narrow ~97%-similar cone.
+  // voyage-4-large is robust enough that template noise barely moves the
+  // noise floor (bench: random-pair p95 +0.005 stripped vs raw), and
+  // raw input gives a small lift on true-pair separation, especially in
+  // the hardest-quartile (sparse-canonical) cases. Same reasoning as the
+  // rerank-side strip-removal (see database/item.gleam build_text).
+  let embed_text = item.title <> "\n\n" <> item.body
   use #(embedding, model) <- result.try(
     voyage.embed(embed_text, model: voyage.Voyage4Large)
     |> result.map_error(map_snag_to_error),

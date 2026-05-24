@@ -60,6 +60,12 @@ deduped AS (
     FROM resolved
     ORDER BY canonical_id, similarity DESC
 )
+-- Top-200 cosine candidates feed into rerank. Bench (N=81 captured-canon
+-- ground truth): at top-50 the canonical falls outside the candidate set
+-- in ~25% of cases (and unconditional rank-1 rate is 35%); at top-200 we
+-- catch the canonical 92% of the time and unconditional rank-1 climbs
+-- to ~45%. Rerank is one HTTP call regardless of K; only the payload
+-- grows.
 SELECT canonical_id AS target_item_id,
        similarity,
        title,
@@ -68,4 +74,4 @@ SELECT canonical_id AS target_item_id,
        state_reason
 FROM deduped
 ORDER BY similarity DESC
-LIMIT 50;
+LIMIT 200;
