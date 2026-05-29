@@ -1,0 +1,16 @@
+build/
+.git/
+.github/
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+README.md
+*.md
+secret.env
+secret.env.example
+.envrc
+.mise.toml
+mise.toml
+snapshots/
+/tmp/
