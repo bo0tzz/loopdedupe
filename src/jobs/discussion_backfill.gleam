@@ -152,7 +152,9 @@ pub fn handle_job(
   )
 
   use _ <- result.try(
-    list.map(page.items, fn(bi) { embeddings.enqueue(ctx.db, bi.item.github_id) })
+    list.map(page.items, fn(bi) {
+      embeddings.enqueue(ctx.db, bi.item.github_id)
+    })
     |> result.all()
     |> result.map_error(map_error),
   )

@@ -58,7 +58,9 @@ fn map_error(error: a) -> BackfillJobError {
   BackfillJobError(string.inspect(error))
 }
 
-fn backfill_job_error_to_json(backfill_job_error: BackfillJobError) -> json.Json {
+fn backfill_job_error_to_json(
+  backfill_job_error: BackfillJobError,
+) -> json.Json {
   let BackfillJobError(message:) = backfill_job_error
   json.object([
     #("message", json.string(message)),
@@ -97,7 +99,11 @@ pub fn handle_backfill_job(
   use <- logs.log_errors()
 
   use items <- result.try(
-    graphql.list_items(ctx.github_client, backfill_job.cursor, backfill_job.since)
+    graphql.list_items(
+      ctx.github_client,
+      backfill_job.cursor,
+      backfill_job.since,
+    )
     |> result.map_error(map_string_to_error),
   )
   // Persist the issue rows and their duplicate-of pointers atomically. Job
@@ -142,7 +148,9 @@ pub fn handle_backfill_job(
   // Best-effort enqueues outside the transaction. embeddings.enqueue already
   // swallows ConstraintViolated, so this collects only the real errors.
   use _ <- result.try(
-    list.map(items.items, fn(bi) { embeddings.enqueue(ctx.db, bi.item.github_id) })
+    list.map(items.items, fn(bi) {
+      embeddings.enqueue(ctx.db, bi.item.github_id)
+    })
     |> result.all()
     |> result.map_error(map_error),
   )

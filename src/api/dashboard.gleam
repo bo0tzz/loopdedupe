@@ -96,16 +96,52 @@ fn backfill_status_block(status: Option(sql.BackfillStatusRow)) -> String {
   let chains = case status {
     option.None -> ""
     option.Some(s) ->
-      chain_progress("issues backfill", s.backfill_chain_pages, s.backfill_chain_age_seconds, s.total_issues, s.backfill_pending + s.backfill_executing)
-      <> chain_progress("discussions backfill", s.discussion_chain_pages, s.discussion_chain_age_seconds, s.total_discussions, s.discussion_pending + s.discussion_executing)
+      chain_progress(
+        "issues backfill",
+        s.backfill_chain_pages,
+        s.backfill_chain_age_seconds,
+        s.total_issues,
+        s.backfill_pending + s.backfill_executing,
+      )
+      <> chain_progress(
+        "discussions backfill",
+        s.discussion_chain_pages,
+        s.discussion_chain_age_seconds,
+        s.total_discussions,
+        s.discussion_pending + s.discussion_executing,
+      )
   }
   let rows = case status {
     option.None -> "<tr><td colspan=\"5\"><em>status unavailable</em></td></tr>"
     option.Some(s) ->
-      queue_row("issues backfill", s.backfill_pending, s.backfill_executing, s.backfill_recent_succeeded, s.backfill_recent_failed)
-      <> queue_row("discussions backfill", s.discussion_pending, s.discussion_executing, s.discussion_recent_succeeded, s.discussion_recent_failed)
-      <> queue_row("embeddings", s.embeddings_pending, s.embeddings_executing, s.embeddings_recent_succeeded, s.embeddings_recent_failed)
-      <> queue_row("similarity", s.similarity_pending, s.similarity_executing, s.similarity_recent_succeeded, s.similarity_recent_failed)
+      queue_row(
+        "issues backfill",
+        s.backfill_pending,
+        s.backfill_executing,
+        s.backfill_recent_succeeded,
+        s.backfill_recent_failed,
+      )
+      <> queue_row(
+        "discussions backfill",
+        s.discussion_pending,
+        s.discussion_executing,
+        s.discussion_recent_succeeded,
+        s.discussion_recent_failed,
+      )
+      <> queue_row(
+        "embeddings",
+        s.embeddings_pending,
+        s.embeddings_executing,
+        s.embeddings_recent_succeeded,
+        s.embeddings_recent_failed,
+      )
+      <> queue_row(
+        "similarity",
+        s.similarity_pending,
+        s.similarity_executing,
+        s.similarity_recent_succeeded,
+        s.similarity_recent_failed,
+      )
   }
   let footer = case status {
     option.None -> ""
@@ -132,7 +168,13 @@ fn backfill_status_block(status: Option(sql.BackfillStatusRow)) -> String {
 // For an incremental walk this overestimates since most pages will fall
 // outside the since-window; in practice the chain ends faster than the
 // total predicts, which is the right kind of error to make.
-fn chain_progress(label: String, pages: Int, age_s: Int, total_items: Int, in_flight: Int) -> String {
+fn chain_progress(
+  label: String,
+  pages: Int,
+  age_s: Int,
+  total_items: Int,
+  in_flight: Int,
+) -> String {
   case pages > 0 || in_flight > 0 {
     False -> ""
     True -> {
@@ -185,23 +227,36 @@ fn format_duration(seconds: Int) -> String {
     s if s < 60 -> int.to_string(s) <> "s"
     s if s < 3600 ->
       int.to_string(s / 60) <> "m " <> int.to_string(s % 60) <> "s"
-    s -> int.to_string(s / 3600) <> "h " <> int.to_string({ s % 3600 } / 60) <> "m"
+    s ->
+      int.to_string(s / 3600) <> "h " <> int.to_string({ s % 3600 } / 60) <> "m"
   }
 }
 
-fn queue_row(name: String, pending: Int, executing: Int, succeeded: Int, failed: Int) -> String {
+fn queue_row(
+  name: String,
+  pending: Int,
+  executing: Int,
+  succeeded: Int,
+  failed: Int,
+) -> String {
   "<tr><td>"
   <> escape(name)
   <> "</td><td>"
   <> int.to_string(pending)
   <> "</td><td class=\""
-  <> case executing > 0 { True -> "live" False -> "" }
+  <> case executing > 0 {
+    True -> "live"
+    False -> ""
+  }
   <> "\">"
   <> int.to_string(executing)
   <> "</td><td>"
   <> int.to_string(succeeded)
   <> "</td><td class=\""
-  <> case failed > 0 { True -> "fail" False -> "" }
+  <> case failed > 0 {
+    True -> "fail"
+    False -> ""
+  }
   <> "\">"
   <> int.to_string(failed)
   <> "</td></tr>"
@@ -536,8 +591,7 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
               "<div class=\"pair-arrow pair-arrow-same-author\">↻ same author — probably a refiling</div>"
             True, _ ->
               "<div class=\"pair-arrow pair-arrow-sym\">↔ either could be the canonical</div>"
-            False, _ ->
-              "<div class=\"pair-arrow\">↓ maybe a duplicate of</div>"
+            False, _ -> "<div class=\"pair-arrow\">↓ maybe a duplicate of</div>"
           }
           // Deprioritized = "closed-with-non-dupe-reason vs open" — empirically
           // 100% dismissal rate / 0% closure rate in the first triage session.
@@ -691,7 +745,7 @@ fn confidence_banner(items: List(github.SuggestedDuplicate)) -> String {
     [first, second, ..] -> {
       let gap = first.similarity -. second.similarity
       let #(label, css_class) = case gap {
-        g if g >=. 0.10 -> #("strong", "confidence-strong")
+        g if g >=. 0.1 -> #("strong", "confidence-strong")
         g if g >=. 0.05 -> #("moderate", "confidence-moderate")
         _ -> #("weak — top candidates are close", "confidence-weak")
       }

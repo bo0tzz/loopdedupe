@@ -503,7 +503,10 @@ pub fn list_discussions(client: squall.Client, cursor: Option(String)) {
 
 fn list_discussions_response_decoder() -> decode.Decoder(ListItemsResponse) {
   let decoder = {
-    use items <- decode.field("nodes", decode.list(discussion_backfill_decoder()))
+    use items <- decode.field(
+      "nodes",
+      decode.list(discussion_backfill_decoder()),
+    )
     use page_info <- decode.field("pageInfo", page_info_decoder())
     decode.success(ListItemsResponse(items:, page_info:))
   }

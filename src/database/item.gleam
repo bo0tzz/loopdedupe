@@ -263,9 +263,7 @@ fn rerank_candidates(
         Ok(pog.Returned(1, [source])) -> {
           let query_text = build_text(source.title, source.body)
           let docs =
-            list.map(candidates, fn(c) {
-              build_text(c.suggested.title, c.body)
-            })
+            list.map(candidates, fn(c) { build_text(c.suggested.title, c.body) })
           case voyage.rerank(query_text, docs) {
             Ok(scored) -> apply_rerank(candidates, scored)
             Error(e) -> {
@@ -318,8 +316,7 @@ fn apply_rerank(
   list.index_map(scored, fn(r, _) { r })
   |> list.filter_map(fn(r) {
     case by_index(r.index) {
-      Ok(s) ->
-        Ok(types.SuggestedDuplicate(..s, similarity: r.score))
+      Ok(s) -> Ok(types.SuggestedDuplicate(..s, similarity: r.score))
       Error(_) -> Error(Nil)
     }
   })

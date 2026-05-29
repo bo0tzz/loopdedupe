@@ -84,7 +84,12 @@ fn handle_discussion(body: String, ctx: Context) -> Result(String, snag.Snag) {
         |> snag.map_error(string.inspect),
       )
       invalidate_rerank_for(ctx, webhook.item.github_id)
-      refresh_canonical_on_close(ctx, webhook.action, DiscussionKind, webhook.item)
+      refresh_canonical_on_close(
+        ctx,
+        webhook.action,
+        DiscussionKind,
+        webhook.item,
+      )
       Ok("OK")
     }
   }
