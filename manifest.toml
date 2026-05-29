@@ -35,7 +35,7 @@ packages = [
   { name = "justin", version = "1.0.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "justin", source = "hex", outer_checksum = "7FA0C6DB78640C6DC5FBFD59BF3456009F3F8B485BF6825E97E1EB44E9A1E2CD" },
   { name = "lifeguard", version = "4.0.0", build_tools = ["gleam"], requirements = ["gleam_deque", "gleam_erlang", "gleam_otp", "gleam_stdlib"], otp_app = "lifeguard", source = "hex", outer_checksum = "31554E956FB93EC2BE46072C766D124E397EAD0DE0121463004523DD45AFCBF8" },
   { name = "logging", version = "1.3.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "logging", source = "hex", outer_checksum = "1098FBF10B54B44C2C7FDF0B01C1253CAFACDACABEFB4B0D027803246753E06D" },
-  { name = "m25", version = "1.0.0", build_tools = ["gleam"], requirements = ["argv", "filepath", "gleam_erlang", "gleam_json", "gleam_otp", "gleam_stdlib", "gleam_time", "glint", "gtempo", "lifeguard", "logging", "pog", "simplifile", "snag", "youid"], source = "git", repo = "git@github.com:bo0tzz/m25.git", commit = "51d9682cf50dd9d154a1d7d19f27fd2a580d460d" },
+  { name = "m25", version = "1.0.0", build_tools = ["gleam"], requirements = ["argv", "filepath", "gleam_erlang", "gleam_json", "gleam_otp", "gleam_stdlib", "gleam_time", "glint", "gtempo", "lifeguard", "logging", "pog", "simplifile", "snag", "youid"], source = "git", repo = "https://github.com/bo0tzz/m25.git", commit = "51d9682cf50dd9d154a1d7d19f27fd2a580d460d" },
   { name = "marceau", version = "1.3.0", build_tools = ["gleam"], requirements = [], otp_app = "marceau", source = "hex", outer_checksum = "2D1C27504BEF45005F5DFB18591F8610FB4BFA91744878210BDC464412EC44E9" },
   { name = "mist", version = "5.0.3", build_tools = ["gleam"], requirements = ["exception", "gleam_erlang", "gleam_http", "gleam_otp", "gleam_stdlib", "gleam_yielder", "glisten", "gramps", "hpack_erl", "logging"], otp_app = "mist", source = "hex", outer_checksum = "7C4BE717A81305323C47C8A591E6B9BA4AC7F56354BF70B4D3DF08CC01192668" },
   { name = "mug", version = "3.1.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_stdlib"], otp_app = "mug", source = "hex", outer_checksum = "C01279D98E40371DA23461774B63F0E3581B8F1396049D881B0C7EB32799D93F" },
@@ -73,7 +73,7 @@ gleam_stdlib = { version = ">= 0.44.0 and < 2.0.0" }
 gleam_time = { version = ">= 1.5.0 and < 2.0.0" }
 gleeunit = { version = ">= 1.0.0 and < 2.0.0" }
 logging = { version = ">= 1.3.0 and < 2.0.0" }
-m25 = { git = "git@github.com:bo0tzz/m25.git", ref = "cigogne" }
+m25 = { git = "https://github.com/bo0tzz/m25.git", ref = "cigogne" }
 mist = { version = ">= 5.0.3 and < 6.0.0" }
 pog = { version = ">= 4.1.0 and < 5.0.0" }
 snag = { version = ">= 1.2.0 and < 2.0.0" }

@@ -7,11 +7,6 @@ FROM ghcr.io/gleam-lang/gleam:v1.16.0-erlang AS build
 
 WORKDIR /build
 
-# m25 is pinned via an SSH git URL in the manifest. Inside the container
-# there are no SSH keys, so rewrite git@github.com: → https://github.com/
-# for the fetch. The repo is public, no auth needed.
-RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
-
 # Resolve and cache deps first so source-only changes don't bust the layer.
 COPY gleam.toml manifest.toml ./
 RUN gleam deps download
