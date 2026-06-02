@@ -357,6 +357,25 @@ pub fn undo_pair_judgment(req: Request, ctx: Context) -> Response {
   }
 }
 
+// Human-friendly redirect: /issues/N or /discussions/N → /items/<github_id>.
+// /items/N takes our internal github_id; this lets a maintainer paste an
+// issue or discussion number straight into the URL bar.
+pub fn redirect_by_number(
+  ctx: Context,
+  kind: sql.ItemType,
+  number_str: String,
+) -> Response {
+  case int.parse(number_str) {
+    Error(_) -> wisp.bad_request("invalid number")
+    Ok(n) ->
+      case sql.select_id_by_number(ctx.db, n, kind) {
+        Ok(pog.Returned(_, [sql.SelectIdByNumberRow(gid)])) ->
+          wisp.redirect("/items/" <> int.to_string(gid))
+        _ -> wisp.not_found()
+      }
+  }
+}
+
 pub fn item_detail(ctx: Context, id: String) -> Response {
   case int.parse(id) {
     Error(_) -> wisp.bad_request("invalid id")

@@ -1193,6 +1193,47 @@ LIMIT 200;
   |> pog.execute(db)
 }
 
+/// A row you get from running the `select_id_by_number` query
+/// defined in `./src/database/sql/select_id_by_number.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type SelectIdByNumberRow {
+  SelectIdByNumberRow(github_id: Int)
+}
+
+/// Resolve a (number, item_type) tuple to its internal github_id, used by
+/// the human-friendly /issues/N and /discussions/N redirect routes.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn select_id_by_number(
+  db: pog.Connection,
+  arg_1: Int,
+  arg_2: ItemType,
+) -> Result(pog.Returned(SelectIdByNumberRow), pog.QueryError) {
+  let decoder = {
+    use github_id <- decode.field(0, decode.int)
+    decode.success(SelectIdByNumberRow(github_id:))
+  }
+
+  "-- Resolve a (number, item_type) tuple to its internal github_id, used by
+-- the human-friendly /issues/N and /discussions/N redirect routes.
+SELECT github_id
+FROM items
+WHERE number = $1
+  AND item_type = $2
+LIMIT 1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(item_type_encoder(arg_2))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `select_item` query
 /// defined in `./src/database/sql/select_item.sql`.
 ///
