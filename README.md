@@ -17,7 +17,19 @@ All config is via environment variables.
 | `VOYAGE_API_KEY` | Voyage AI API key — used for both `voyage-4-large` embeddings and `rerank-2.5` reranking. |
 | `ENVIRONMENT` | `dev` or `production`. Currently only changes the `is_dev()` check. |
 
-The webhook endpoint is `POST /api/webhooks/github`; point GitHub's repo webhook at it with content-type `application/json` and the same secret as `GITHUB_WEBHOOK_SECRET`. Subscribe to **Issues** and **Discussions** events.
+### Webhook
+
+Configure the repo webhook to `POST /api/webhooks/github`:
+
+- **Payload URL**: `https://<your-host>/api/webhooks/github`
+- **Content type**: `application/json` (required — `form-urlencoded` is rejected)
+- **Secret**: same value as the `GITHUB_WEBHOOK_SECRET` env var (HMAC-SHA256 signature is verified on every delivery)
+- **SSL verification**: enabled
+- **Which events**: select **"Let me select individual events"** and tick exactly:
+  - **Issues** — covers every issue action (opened / edited / closed / reopened / labeled / etc.). The handler upserts the item and re-embeds on every action; `closed` additionally triggers an incremental backfill to capture timeline-derived signals (canonical pointer, closer, MarkedAsDuplicate).
+  - **Discussions** — same shape as Issues, but the handler silently no-ops for any discussion outside the `feature-request` category (other categories aren't dedupe candidates).
+
+Don't subscribe to other events (Issue comments, Discussion comments, Pushes, etc.) — the handler returns 200 for any unknown `X-GitHub-Event` so deliveries won't error, but they're discarded. Just Issues + Discussions is enough.
 
 ## Container
 
