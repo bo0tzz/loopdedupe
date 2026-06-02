@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.5](https://github.com/bo0tzz/loopdedupe/compare/v0.0.4...v0.0.5) (2026-06-02)
+
+
+### Features
+
+* **routes:** /issues/N and /discussions/N redirect to candidate detail ([61a1d79](https://github.com/bo0tzz/loopdedupe/commit/61a1d79dfd114c38ec284c3edaf14422fbbc6082))
+
 ## [0.0.4](https://github.com/bo0tzz/loopdedupe/compare/v0.0.3...v0.0.4) (2026-06-02)
 
 
