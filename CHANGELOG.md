@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.4](https://github.com/bo0tzz/loopdedupe/compare/v0.0.3...v0.0.4) (2026-06-02)
+
+
+### Features
+
+* **auth:** support GitHub App authentication in addition to PAT ([dc79bf0](https://github.com/bo0tzz/loopdedupe/commit/dc79bf093ad649cc70ae416eded5bb061822b2d1))
+
 ## [0.0.3](https://github.com/bo0tzz/loopdedupe/compare/v0.0.2...v0.0.3) (2026-06-02)
 
 
