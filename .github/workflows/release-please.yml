@@ -14,3 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        with:
+          # Default GITHUB_TOKEN can't trigger downstream workflows, so the
+          # tag push wouldn't fire build.yml. Use a PAT scoped to contents
+          # (read+write) and pull-requests (read+write) on this repo.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
