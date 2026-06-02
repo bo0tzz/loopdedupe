@@ -1,6 +1,6 @@
 import api/router
 import database/connection
-import github/graphql
+import github/auth
 import gleam/erlang/process
 import gleam/otp/static_supervisor
 import jobs/setup
@@ -14,10 +14,9 @@ pub fn main() {
   wisp.configure_logger()
   let db_name = process.new_name("database")
   let db = pog.named_connection(db_name)
+  let auth_name = process.new_name("github_auth")
 
-  let github_client = graphql.new_client()
-
-  let ctx = Context(db_name:, db:, github_client:)
+  let ctx = Context(db_name:, db:, auth: auth_name)
 
   let assert Ok(_) = start_supervisor(ctx)
 
@@ -27,6 +26,7 @@ pub fn main() {
 fn start_supervisor(ctx: Context) {
   static_supervisor.new(static_supervisor.RestForOne)
   |> static_supervisor.add(connection.supervised(ctx))
+  |> static_supervisor.add(auth.supervised(ctx.auth))
   |> static_supervisor.add(setup.supervised(ctx))
   |> static_supervisor.add(router.supervised(ctx))
   |> static_supervisor.start()

@@ -1,5 +1,6 @@
 import database/item
 import database/sql
+import github/auth
 import github/graphql
 import gleam/dynamic/decode
 import gleam/json
@@ -100,7 +101,7 @@ pub fn handle_backfill_job(
 
   use items <- result.try(
     graphql.list_items(
-      ctx.github_client,
+      auth.client(ctx.auth),
       backfill_job.cursor,
       backfill_job.since,
     )

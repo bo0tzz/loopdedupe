@@ -11,6 +11,7 @@
 
 import database/item
 import database/sql
+import github/auth
 import github/graphql
 import gleam/dynamic/decode
 import gleam/json
@@ -111,7 +112,7 @@ pub fn handle_job(
   use <- logs.log_errors()
 
   use page <- result.try(
-    graphql.list_discussions(ctx.github_client, job.cursor)
+    graphql.list_discussions(auth.client(ctx.auth), job.cursor)
     |> result.map_error(map_string_to_error),
   )
 

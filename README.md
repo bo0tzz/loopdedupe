@@ -11,11 +11,21 @@ All config is via environment variables.
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | Postgres connection string. The Postgres needs the `vchord` extension; migrations expect it loaded. |
-| `SECRET_KEY_BASE` | Wisp session signing key. |
-| `GITHUB_TOKEN` | Used for GraphQL backfill against the immich repo. A classic PAT with `public_repo` scope is enough. |
+| `SECRET_KEY_BASE` | Wisp session signing key — must be ≥64 bytes (`openssl rand -hex 64`). |
 | `GITHUB_WEBHOOK_SECRET` | HMAC secret configured on the repo's webhook. Webhook delivery is rejected if this doesn't match. |
 | `VOYAGE_API_KEY` | Voyage AI API key — used for both `voyage-4-large` embeddings and `rerank-2.5` reranking. |
 | `ENVIRONMENT` | `dev` or `production`. Currently only changes the `is_dev()` check. |
+
+#### GitHub authentication
+
+Pick **one** of these two modes:
+
+| Mode | Variables | Notes |
+|---|---|---|
+| Personal Access Token | `GITHUB_TOKEN` | Classic PAT with `public_repo` scope is enough. Simplest. Token never refreshes. |
+| GitHub App (preferred) | `GITHUB_APP_ID` + `GITHUB_APP_INSTALLATION_ID` + `GITHUB_APP_PRIVATE_KEY` | Better audit trail. App needs Issues/Discussions **read** + Metadata **read** permissions and must be installed on the repo. Installation tokens auto-refresh ~5 min before their 1-hour expiry. |
+
+App mode wins if all three App variables are present; otherwise the app falls back to PAT mode. `GITHUB_APP_PRIVATE_KEY` is the PEM contents (multi-line `-----BEGIN ... -----` block); in a Kubernetes Secret just paste the whole PEM as the value.
 
 ### Webhook
 

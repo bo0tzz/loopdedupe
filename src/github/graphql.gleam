@@ -1,4 +1,3 @@
-import config
 import github/types
 import gleam/dynamic/decode
 import gleam/float
@@ -24,11 +23,6 @@ fn is_maintainer_association(assoc: String) -> Bool {
     "OWNER" | "MEMBER" | "COLLABORATOR" -> True
     _ -> False
   }
-}
-
-pub fn new_client() {
-  let token = config.get_env(config.GithubToken)
-  squall.new_with_auth("https://api.github.com/graphql", token)
 }
 
 pub fn list_items(
