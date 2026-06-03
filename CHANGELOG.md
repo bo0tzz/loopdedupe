@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.6](https://github.com/bo0tzz/loopdedupe/compare/v0.0.5...v0.0.6) (2026-06-03)
+
+
+### Bug Fixes
+
+* bind to 0.0.0.0 instead of localhost so the container is reachable ([33a71fa](https://github.com/bo0tzz/loopdedupe/commit/33a71fa8934a2fc8e96a08d3fcbc3cbbbe9f17fe))
+
 ## [0.0.5](https://github.com/bo0tzz/loopdedupe/compare/v0.0.4...v0.0.5) (2026-06-02)
 
 
