@@ -451,7 +451,11 @@ fn style_block() -> String {
     .deprioritized-row { opacity: 0.55; }
     .deprioritized-row:hover { opacity: 1; }
     .similarity { font-variant-numeric: tabular-nums; font-weight: 600; }
-    .date-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .recent-list { display: grid; grid-template-columns: auto 1fr; column-gap: 0.6em; }
+    .recent-list > * { padding: 0.55em 0; border-bottom: 1px solid #eee; }
+    @media (prefers-color-scheme: dark) { .recent-list > * { border-color: #333; } }
+    .recent-head { font-weight: 600; opacity: 0.7; font-size: 0.9em; }
+    .recent-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
     .kind { display: inline-block; font-size: 0.7em; padding: 0.1em 0.4em; border-radius: 3px; background: #ddd; color: #333; vertical-align: middle; margin-right: 0.3em; }
     .kind-discussion { background: #c8e6c9; }
     .resolution-hint { font-size: 0.75em; opacity: 0.6; font-style: italic; margin-left: 0.5em; }
@@ -691,12 +695,14 @@ fn recent_table(rows: List(sql.DashboardRecentItemsRow)) -> String {
   case rows {
     [] -> "<p><em>No items yet.</em></p>"
     _ ->
-      "<table><thead><tr><th>Created</th><th>Item</th></tr></thead><tbody>"
+      "<div class=\"recent-list\">"
+      <> "<div class=\"recent-head\">Created</div>"
+      <> "<div class=\"recent-head\">Item</div>"
       <> {
         list.map(rows, fn(row) {
-          "<tr><td class=\"date-cell\">"
+          "<div class=\"recent-date\">"
           <> escape(format_date(row.github_created_at))
-          <> "</td><td><a class=\""
+          <> "</div><div class=\"recent-item\"><a class=\""
           <> state_class(row.state, row.state_reason)
           <> "\" href=\"/items/"
           <> int.to_string(row.github_id)
@@ -706,11 +712,11 @@ fn recent_table(rows: List(sql.DashboardRecentItemsRow)) -> String {
           <> int.to_string(row.number)
           <> " "
           <> escape(row.title)
-          <> "</a></td></tr>"
+          <> "</a></div>"
         })
         |> string.concat()
       }
-      <> "</tbody></table>"
+      <> "</div>"
   }
 }
 
