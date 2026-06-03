@@ -34,10 +34,13 @@ pub fn index(ctx: Context) -> Response {
   let body =
     page("loopdedupe", [
       stats_block(stats),
-      "<div class=\"columns\"><section><h2>Top candidate pairs</h2>",
-      pairs_table(pairs),
-      "</section><section><h2>Recent items</h2>",
+      // Recent items first in source order so it lands on top on mobile,
+      // where .columns collapses to a single column. On desktop the
+      // grid lays them out side-by-side regardless of order.
+      "<div class=\"columns\"><section><h2>Recent items</h2>",
       recent_table(recent),
+      "</section><section><h2>Top candidate pairs</h2>",
+      pairs_table(pairs),
       "</section></div>",
     ])
 
