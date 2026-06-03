@@ -292,7 +292,10 @@ fn judgments_table(rows: List(sql.ListJudgmentsRow)) -> String {
   case rows {
     [] -> "<p><em>No dismissed pairs yet.</em></p>"
     _ ->
-      "<table><thead><tr><th>Dismissed</th><th>Pair</th><th></th></tr></thead><tbody>"
+      "<div class=\"judgments-list\">"
+      <> "<div class=\"judgment-row judgment-header\">"
+      <> "<span>Dismissed</span><span>Pair</span><span></span>"
+      <> "</div>"
       <> {
         list.map(rows, fn(row) {
           let src =
@@ -323,20 +326,21 @@ fn judgments_table(rows: List(sql.ListJudgmentsRow)) -> String {
             <> int.to_string(src.id)
             <> "&b="
             <> int.to_string(tgt.id)
-            <> "\" hx-target=\"closest tr\" hx-swap=\"outerHTML swap:0.15s\">undo</button>"
-          "<tr><td class=\"muted\">"
+            <> "\" hx-target=\"closest .judgment-row\" hx-swap=\"outerHTML swap:0.15s\">undo</button>"
+          "<div class=\"judgment-row\">"
+          <> "<span class=\"judgment-date muted\">"
           <> escape(format_date(row.judged_at))
-          <> "</td><td>"
+          <> "</span><div class=\"judgment-pair\">"
           <> pair_side(src, "candidate")
           <> "<div class=\"pair-arrow\">↮ not a duplicate</div>"
           <> pair_side(tgt, "canonical")
-          <> "</td><td class=\"dismiss-cell\">"
+          <> "</div><span class=\"judgment-undo\">"
           <> undo_btn
-          <> "</td></tr>"
+          <> "</span></div>"
         })
         |> string.concat()
       }
-      <> "</tbody></table>"
+      <> "</div>"
   }
 }
 
@@ -464,6 +468,13 @@ fn style_block() -> String {
     @media (prefers-color-scheme: dark) { .recent-list > * { border-color: #333; } }
     .recent-head { font-weight: 600; opacity: 0.7; font-size: 0.9em; }
     .recent-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .judgments-list { display: grid; grid-template-columns: auto 1fr auto; column-gap: 1em; }
+    .judgments-list > .judgment-row { display: contents; }
+    .judgments-list > .judgment-row > * { padding: 0.55em 0; border-bottom: 1px solid #eee; vertical-align: top; }
+    @media (prefers-color-scheme: dark) { .judgments-list > .judgment-row > * { border-color: #333; } }
+    .judgment-header { font-weight: 600; opacity: 0.7; font-size: 0.9em; }
+    .judgment-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .judgment-undo { text-align: center; }
     .kind { display: inline-block; font-size: 0.7em; padding: 0.1em 0.4em; border-radius: 3px; background: #ddd; color: #333; vertical-align: middle; margin-right: 0.3em; }
     .kind-discussion { background: #c8e6c9; }
     .resolution-hint { font-size: 0.75em; opacity: 0.6; font-style: italic; margin-left: 0.5em; }
