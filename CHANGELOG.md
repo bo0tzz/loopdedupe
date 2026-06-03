@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.7](https://github.com/bo0tzz/loopdedupe/compare/v0.0.6...v0.0.7) (2026-06-03)
+
+
+### Features
+
+* **dashboard:** show recent items above top candidates ([58a5d36](https://github.com/bo0tzz/loopdedupe/commit/58a5d3675e22f5a59d09b259ebe3e8da1716aaf0))
+
+
+### Bug Fixes
+
+* **dashboard:** nowrap recent-items date column ([fee8470](https://github.com/bo0tzz/loopdedupe/commit/fee84704e435d7a1c469c7661876a7777edc1648))
+
 ## [0.0.6](https://github.com/bo0tzz/loopdedupe/compare/v0.0.5...v0.0.6) (2026-06-03)
 
 
