@@ -458,6 +458,12 @@ fn style_block() -> String {
     .pair-arrow-sym { opacity: 0.45; }
     .pair-arrow-same-author { color: #b5651d; opacity: 1; font-style: normal; font-weight: 600; }
     @media (prefers-color-scheme: dark) { .pair-arrow-same-author { color: #f6c873; } }
+    .pair-row { display: flex; gap: 1em; padding: 0.55em 0; border-bottom: 1px solid #eee; align-items: flex-start; }
+    @media (prefers-color-scheme: dark) { .pair-row { border-color: #333; } }
+    .pair-row > .similarity { flex: 0 0 3.5em; }
+    .pair-row > .pair-cell { flex: 1; min-width: 0; }
+    .pair-row > .pair-dismiss { flex: 0 0 auto; text-align: center; }
+    .pair-header { font-weight: 600; opacity: 0.7; font-size: 0.9em; }
     .same-author-row { background: rgba(255, 200, 100, 0.08); }
     @media (prefers-color-scheme: dark) { .same-author-row { background: rgba(255, 200, 100, 0.04); } }
     .deprioritized-row { opacity: 0.55; }
@@ -479,7 +485,6 @@ fn style_block() -> String {
     .kind-discussion { background: #c8e6c9; }
     .resolution-hint { font-size: 0.75em; opacity: 0.6; font-style: italic; margin-left: 0.5em; }
     .author { font-size: 0.75em; opacity: 0.6; margin-left: 0.5em; font-variant: tabular-nums; }
-    .dismiss-cell { width: 2em; text-align: center; vertical-align: middle; }
     .dismiss, .undo { background: transparent; border: 1px solid #ccc; border-radius: 3px; padding: 0.1em 0.45em; cursor: pointer; opacity: 0.4; color: inherit; line-height: 1; }
     .dismiss { font-size: 1.1em; }
     .undo { font-size: 0.85em; }
@@ -631,7 +636,10 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
   case rows {
     [] -> "<p><em>No pairs yet. Run backfill to populate.</em></p>"
     _ ->
-      "<table><thead><tr><th>Sim</th><th>Pair</th><th></th></tr></thead><tbody>"
+      "<div class=\"pairs-list\">"
+      <> "<div class=\"pair-row pair-header\">"
+      <> "<span>Sim</span><span>Pair</span><span></span>"
+      <> "</div>"
       <> {
         list.map(rows, fn(row) {
           let #(candidate, canonical, symmetric) = orient_pair(row)
@@ -651,9 +659,9 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
           // Sink to the bottom and grey out so they're scannable but don't
           // crowd out actionable pairs.
           let row_class = case same_author, row.deprioritized {
-            _, True -> "<tr class=\"deprioritized-row\">"
-            True, _ -> "<tr class=\"same-author-row\">"
-            False, _ -> "<tr>"
+            _, True -> "pair-row deprioritized-row"
+            True, _ -> "pair-row same-author-row"
+            False, _ -> "pair-row"
           }
           let dismiss_btn =
             "<button class=\"dismiss\" title=\"dismiss as not a duplicate\""
@@ -661,21 +669,22 @@ fn pairs_table(rows: List(sql.DashboardTopPairsRow)) -> String {
             <> int.to_string(candidate.id)
             <> "&b="
             <> int.to_string(canonical.id)
-            <> "\" hx-target=\"closest tr\" hx-swap=\"outerHTML swap:0.15s\">×</button>"
-          row_class
-          <> "<td class=\"similarity\">"
+            <> "\" hx-target=\"closest .pair-row\" hx-swap=\"outerHTML swap:0.15s\">×</button>"
+          "<div class=\""
+          <> row_class
+          <> "\"><span class=\"similarity\">"
           <> format_similarity(row.similarity)
-          <> "</td><td>"
+          <> "</span><div class=\"pair-cell\">"
           <> pair_side(candidate, "candidate")
           <> separator
           <> pair_side(canonical, "canonical")
-          <> "</td><td class=\"dismiss-cell\">"
+          <> "</div><span class=\"pair-dismiss\">"
           <> dismiss_btn
-          <> "</td></tr>"
+          <> "</span></div>"
         })
         |> string.concat()
       }
-      <> "</tbody></table>"
+      <> "</div>"
   }
 }
 
