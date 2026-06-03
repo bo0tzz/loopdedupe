@@ -448,6 +448,7 @@ fn style_block() -> String {
     .deprioritized-row { opacity: 0.55; }
     .deprioritized-row:hover { opacity: 1; }
     .similarity { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .date-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
     .kind { display: inline-block; font-size: 0.7em; padding: 0.1em 0.4em; border-radius: 3px; background: #ddd; color: #333; vertical-align: middle; margin-right: 0.3em; }
     .kind-discussion { background: #c8e6c9; }
     .resolution-hint { font-size: 0.75em; opacity: 0.6; font-style: italic; margin-left: 0.5em; }
@@ -690,7 +691,7 @@ fn recent_table(rows: List(sql.DashboardRecentItemsRow)) -> String {
       "<table><thead><tr><th>Created</th><th>Item</th></tr></thead><tbody>"
       <> {
         list.map(rows, fn(row) {
-          "<tr><td>"
+          "<tr><td class=\"date-cell\">"
           <> escape(format_date(row.github_created_at))
           <> "</td><td><a class=\""
           <> state_class(row.state, row.state_reason)
