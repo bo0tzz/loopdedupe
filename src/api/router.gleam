@@ -23,6 +23,7 @@ pub fn supervised(ctx: Context) {
   wisp_mist.handler(handler, secret)
   |> mist.new
   |> mist.port(8000)
+  |> mist.bind("0.0.0.0")
   |> mist.supervised
 }
 
