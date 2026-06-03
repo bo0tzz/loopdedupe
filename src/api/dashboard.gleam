@@ -115,7 +115,8 @@ fn backfill_status_block(status: Option(sql.BackfillStatusRow)) -> String {
       )
   }
   let rows = case status {
-    option.None -> "<tr><td colspan=\"5\"><em>status unavailable</em></td></tr>"
+    option.None ->
+      "<div class=\"queue-cell queue-empty\"><em>status unavailable</em></div>"
     option.Some(s) ->
       queue_row(
         "issues backfill",
@@ -158,9 +159,14 @@ fn backfill_status_block(status: Option(sql.BackfillStatusRow)) -> String {
   "<div id=\"backfill-status\" hx-get=\"/backfills/status\" hx-trigger=\"every 2s\" hx-swap=\"outerHTML\">"
   <> chains
   <> "<h3>Queue status</h3>"
-  <> "<table class=\"queue-status\"><thead><tr><th>queue</th><th>pending</th><th>executing</th><th>succeeded (5m)</th><th>failed (5m)</th></tr></thead><tbody>"
+  <> "<div class=\"queue-status\">"
+  <> "<div class=\"queue-cell queue-head\">queue</div>"
+  <> "<div class=\"queue-cell queue-head num\">pending</div>"
+  <> "<div class=\"queue-cell queue-head num\">executing</div>"
+  <> "<div class=\"queue-cell queue-head num\">succeeded (5m)</div>"
+  <> "<div class=\"queue-cell queue-head num\">failed (5m)</div>"
   <> rows
-  <> "</tbody></table>"
+  <> "</div>"
   <> footer
   <> "</div>"
 }
@@ -242,27 +248,29 @@ fn queue_row(
   succeeded: Int,
   failed: Int,
 ) -> String {
-  "<tr><td>"
-  <> escape(name)
-  <> "</td><td>"
-  <> int.to_string(pending)
-  <> "</td><td class=\""
-  <> case executing > 0 {
-    True -> "live"
+  let executing_class = case executing > 0 {
+    True -> " live"
     False -> ""
   }
+  let failed_class = case failed > 0 {
+    True -> " fail"
+    False -> ""
+  }
+  "<div class=\"queue-cell\">"
+  <> escape(name)
+  <> "</div><div class=\"queue-cell num\">"
+  <> int.to_string(pending)
+  <> "</div><div class=\"queue-cell num"
+  <> executing_class
   <> "\">"
   <> int.to_string(executing)
-  <> "</td><td>"
+  <> "</div><div class=\"queue-cell num\">"
   <> int.to_string(succeeded)
-  <> "</td><td class=\""
-  <> case failed > 0 {
-    True -> "fail"
-    False -> ""
-  }
+  <> "</div><div class=\"queue-cell num"
+  <> failed_class
   <> "\">"
   <> int.to_string(failed)
-  <> "</td></tr>"
+  <> "</div>"
 }
 
 pub fn judgments(ctx: Context) -> Response {
@@ -482,12 +490,16 @@ fn style_block() -> String {
     .backfill-triggers .trigger:hover { background: rgba(0, 100, 200, 0.08); border-color: #06c; }
     @media (prefers-color-scheme: dark) { .backfill-triggers .trigger:hover { background: rgba(120, 180, 255, 0.12); } }
     .backfill-triggers .flash { flex-basis: 100%; font-size: 0.9em; opacity: 0.75; font-family: ui-monospace, monospace; }
-    .queue-status { max-width: 700px; font-variant-numeric: tabular-nums; }
-    .queue-status td:not(:first-child), .queue-status th:not(:first-child) { text-align: right; padding-right: 1.2em; }
-    .queue-status td.live { color: #06c; font-weight: 600; }
-    @media (prefers-color-scheme: dark) { .queue-status td.live { color: #6cf; } }
-    .queue-status td.fail { color: #c33; font-weight: 600; }
-    @media (prefers-color-scheme: dark) { .queue-status td.fail { color: #f88; } }
+    .queue-status { display: grid; grid-template-columns: 1fr repeat(4, auto); column-gap: 1.2em; max-width: 700px; font-variant-numeric: tabular-nums; }
+    .queue-cell { padding: 0.4em 0; border-bottom: 1px solid #eee; }
+    @media (prefers-color-scheme: dark) { .queue-cell { border-color: #333; } }
+    .queue-cell.num { text-align: right; }
+    .queue-head { font-weight: 600; opacity: 0.7; font-size: 0.9em; }
+    .queue-cell.live { color: #06c; font-weight: 600; }
+    @media (prefers-color-scheme: dark) { .queue-cell.live { color: #6cf; } }
+    .queue-cell.fail { color: #c33; font-weight: 600; }
+    @media (prefers-color-scheme: dark) { .queue-cell.fail { color: #f88; } }
+    .queue-empty { grid-column: 1 / -1; }
     .chain { max-width: 700px; margin: 0.6em 0; font-variant-numeric: tabular-nums; }
     .chain-label { font-size: 0.9em; margin-bottom: 0.25em; }
     .chain-bar { height: 6px; background: rgba(120, 120, 120, 0.15); border-radius: 3px; overflow: hidden; }
