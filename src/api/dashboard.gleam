@@ -516,16 +516,19 @@ fn style_block() -> String {
     .chain-bar { height: 6px; background: rgba(120, 120, 120, 0.15); border-radius: 3px; overflow: hidden; }
     .chain-fill { height: 100%; background: #06c; transition: width 0.3s ease; }
     @media (prefers-color-scheme: dark) { .chain-fill { background: #6cf; } }
-    .confidence-row td { font-size: 0.85em; padding: 0.4em 0.6em; border-bottom: 1px solid #eee; }
-    @media (prefers-color-scheme: dark) { .confidence-row td { border-color: #333; } }
+    .candidates-list { display: grid; grid-template-columns: auto 1fr; column-gap: 0.6em; }
+    .candidates-list > * { padding: 0.55em 0; border-bottom: 1px solid #eee; }
+    @media (prefers-color-scheme: dark) { .candidates-list > * { border-color: #333; } }
+    .candidates-head { font-weight: 600; opacity: 0.7; font-size: 0.9em; }
+    .confidence-banner { grid-column: 1 / -1; font-size: 0.85em; padding: 0.4em 0; }
     .confidence-label { text-transform: uppercase; font-size: 0.75em; letter-spacing: 0.05em; opacity: 0.75; margin-right: 0.3em; }
     .confidence-gap { opacity: 0.6; font-size: 0.9em; margin-left: 0.2em; }
-    .confidence-strong td { color: #393; }
-    @media (prefers-color-scheme: dark) { .confidence-strong td { color: #8e8; } }
-    .confidence-moderate td { color: #b5651d; }
-    @media (prefers-color-scheme: dark) { .confidence-moderate td { color: #f6c873; } }
-    .confidence-weak td { color: #c33; }
-    @media (prefers-color-scheme: dark) { .confidence-weak td { color: #f88; } }
+    .confidence-strong { color: #393; }
+    @media (prefers-color-scheme: dark) { .confidence-strong { color: #8e8; } }
+    .confidence-moderate { color: #b5651d; }
+    @media (prefers-color-scheme: dark) { .confidence-moderate { color: #f6c873; } }
+    .confidence-weak { color: #c33; }
+    @media (prefers-color-scheme: dark) { .confidence-weak { color: #f88; } }
   </style>"
 }
 
@@ -763,25 +766,25 @@ fn candidates_table(items: List(github.SuggestedDuplicate)) -> String {
   case items {
     [] -> "<p><em>No candidates above threshold.</em></p>"
     _ ->
-      "<table><thead><tr><th>Sim</th><th>Candidate</th></tr></thead><tbody>"
+      "<div class=\"candidates-list\">"
+      <> confidence_banner(items)
+      <> "<div class=\"candidates-head similarity\">Sim</div>"
+      <> "<div class=\"candidates-head\">Candidate</div>"
       <> {
-        let banner = confidence_banner(items)
-        let rows =
-          list.map(items, fn(c) {
-            "<tr><td class=\"similarity\">"
-            <> format_similarity(c.similarity)
-            <> "</td><td><a class=\""
-            <> state_class_github(c.state, c.state_reason)
-            <> "\" href=\"/items/"
-            <> int.to_string(c.github_id)
-            <> "\">"
-            <> escape(c.title)
-            <> "</a></td></tr>"
-          })
-          |> string.concat()
-        banner <> rows
+        list.map(items, fn(c) {
+          "<div class=\"similarity\">"
+          <> format_similarity(c.similarity)
+          <> "</div><div class=\"candidate-title\"><a class=\""
+          <> state_class_github(c.state, c.state_reason)
+          <> "\" href=\"/items/"
+          <> int.to_string(c.github_id)
+          <> "\">"
+          <> escape(c.title)
+          <> "</a></div>"
+        })
+        |> string.concat()
       }
-      <> "</tbody></table>"
+      <> "</div>"
   }
 }
 
@@ -801,13 +804,13 @@ fn confidence_banner(items: List(github.SuggestedDuplicate)) -> String {
         g if g >=. 0.05 -> #("moderate", "confidence-moderate")
         _ -> #("weak — top candidates are close", "confidence-weak")
       }
-      "<tr class=\"confidence-row "
+      "<div class=\"confidence-banner "
       <> css_class
-      <> "\"><td colspan=\"2\"><span class=\"confidence-label\">confidence</span> "
+      <> "\"><span class=\"confidence-label\">confidence</span> "
       <> escape(label)
       <> " <span class=\"confidence-gap\">(rank 1 leads by "
       <> format_similarity(gap)
-      <> ")</span></td></tr>"
+      <> ")</span></div>"
     }
     _ -> ""
   }
