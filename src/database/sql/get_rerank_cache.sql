@@ -21,7 +21,6 @@ chain AS (
         FROM walk w
                  JOIN items source ON source.github_id = w.current_id
                  JOIN items target ON target.number = source.duplicate_of_number
-                                  AND target.item_type = source.item_type
         WHERE source.duplicate_of_number IS NOT NULL AND w.depth < 10
     )
     SELECT * FROM walk

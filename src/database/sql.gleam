@@ -793,7 +793,6 @@ chain AS (
         FROM walk w
                  JOIN items source ON source.github_id = w.current_id
                  JOIN items target ON target.number = source.duplicate_of_number
-                                  AND target.item_type = source.item_type
         WHERE source.duplicate_of_number IS NOT NULL AND w.depth < 10
     )
     SELECT * FROM walk
@@ -1458,7 +1457,6 @@ chain AS (
         FROM walk w
                  JOIN items source ON source.github_id = w.current_id
                  JOIN items target ON target.number = source.duplicate_of_number
-                                  AND target.item_type = source.item_type
         WHERE source.duplicate_of_number IS NOT NULL AND w.depth < 10
     )
     SELECT * FROM walk
@@ -1631,9 +1629,7 @@ fn item_state_encoder(item_state) -> pog.Value {
     Open -> "open"
   }
   |> pog.text
-}
-
-/// Corresponds to the Postgres `item_state_reason` enum.
+}/// Corresponds to the Postgres `item_state_reason` enum.
 ///
 /// > 🐿️ This type definition was generated automatically using v4.6.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -1670,9 +1666,7 @@ fn item_state_reason_encoder(item_state_reason) -> pog.Value {
     Completed -> "completed"
   }
   |> pog.text
-}
-
-/// Corresponds to the Postgres `item_type` enum.
+}/// Corresponds to the Postgres `item_type` enum.
 ///
 /// > 🐿️ This type definition was generated automatically using v4.6.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
@@ -1697,9 +1691,7 @@ fn item_type_encoder(item_type) -> pog.Value {
     Issue -> "issue"
   }
   |> pog.text
-}
-
-/// Corresponds to the Postgres `pair_verdict` enum.
+}/// Corresponds to the Postgres `pair_verdict` enum.
 ///
 /// > 🐿️ This type definition was generated automatically using v4.6.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
