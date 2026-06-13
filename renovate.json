@@ -17,9 +17,10 @@
     },
     {
       "matchDatasources": ["docker"],
-      "matchPackageNames": ["erlang"],
-      "enabled": false,
-      "description": "Runtime OTP version must match what's bundled in the gleam build image. Bumped manually alongside the gleam image so the BEAM bytecode versions stay in sync (bumping just one breaks loading the shipment)."
+      "matchPackageNames": ["ghcr.io/gleam-lang/gleam", "erlang"],
+      "groupName": "gleam build + erlang runtime",
+      "minimumGroupSize": 2,
+      "description": "Runtime erlang must match the OTP version bundled in the gleam build image. minimumGroupSize=2 postpones branch creation until both have a pending update so they bump as one PR — never bumping erlang alone."
     }
   ]
 }
