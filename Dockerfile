@@ -18,7 +18,7 @@ RUN gleam export erlang-shipment
 
 # --- Runtime stage ----------------------------------------------------------
 # Plain erlang:27-slim is enough — the shipment includes everything app-side.
-FROM erlang:28-slim
+FROM erlang:29-slim
 
 WORKDIR /app
 
