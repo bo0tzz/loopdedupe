@@ -11,12 +11,15 @@
     },
     {
       "matchDatasources": ["docker"],
-      "matchPackageNames": [
-        "ghcr.io/gleam-lang/gleam",
-        "erlang"
-      ],
-      "groupName": "gleam build + erlang runtime",
-      "separateMajorMinor": false
+      "matchPackageNames": ["ghcr.io/gleam-lang/gleam"],
+      "allowedVersions": "< 1.17",
+      "description": "1.17+ ships an OTP point release that surfaces a deprecated-catch warning rebar3 escalates to an error inside the jose Erlang lib. Unpin once jose >1.11.12 ships a fix."
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["erlang"],
+      "enabled": false,
+      "description": "Runtime OTP version must match what's bundled in the gleam build image. Bumped manually alongside the gleam image so the BEAM bytecode versions stay in sync (bumping just one breaks loading the shipment)."
     }
   ]
 }
