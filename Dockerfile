@@ -3,7 +3,7 @@
 # an erlang-shipment, which is a self-contained directory of compiled BEAM
 # files for the app and all its deps plus an entrypoint script that boots
 # everything as an OTP release.
-FROM ghcr.io/gleam-lang/gleam:v1.16.0-erlang AS build
+FROM ghcr.io/gleam-lang/gleam:v1.17.0-erlang AS build
 
 WORKDIR /build
 
@@ -18,7 +18,7 @@ RUN gleam export erlang-shipment
 
 # --- Runtime stage ----------------------------------------------------------
 # Plain erlang:27-slim is enough — the shipment includes everything app-side.
-FROM erlang:28-slim
+FROM erlang:29-slim
 
 WORKDIR /app
 
