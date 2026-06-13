@@ -15,7 +15,8 @@
         "ghcr.io/gleam-lang/gleam",
         "erlang"
       ],
-      "groupName": "gleam build + erlang runtime"
+      "groupName": "gleam build + erlang runtime",
+      "separateMajorMinor": false
     }
   ]
 }
