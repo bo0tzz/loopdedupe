@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.8](https://github.com/bo0tzz/loopdedupe/compare/v0.0.7...v0.0.8) (2026-06-13)
+
+
+### Bug Fixes
+
+* chain across kinds for items.duplicate_of_number ([e8d75f1](https://github.com/bo0tzz/loopdedupe/commit/e8d75f1ef0f3fc77539af3fd83ad1a0c47c77386))
+
 ## [0.0.7](https://github.com/bo0tzz/loopdedupe/compare/v0.0.6...v0.0.7) (2026-06-03)
 
 
