@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.9](https://github.com/bo0tzz/loopdedupe/compare/v0.0.8...v0.0.9) (2026-06-15)
+
+
+### Bug Fixes
+
+* **github:** prefer html_url over url when decoding items ([76101b0](https://github.com/bo0tzz/loopdedupe/commit/76101b02feba815e74c26bdfdeffc639e6dcced9))
+
 ## [0.0.8](https://github.com/bo0tzz/loopdedupe/compare/v0.0.7...v0.0.8) (2026-06-13)
 
 
