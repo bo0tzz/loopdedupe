@@ -135,9 +135,12 @@ pub fn issue_decoder() {
       ],
     )
   use state_reason <- decode.then(state_reason_decoder)
+  // REST payloads carry both `url` (the api.github.com API URL) and `html_url`
+  // (the web UI URL); we want the latter. GraphQL only has `url`, and there it
+  // already is the web URL, so it's the correct fallback.
   let url_decoder =
-    decode.one_of(decode.at(["url"], decode.string), or: [
-      decode.at(["html_url"], decode.string),
+    decode.one_of(decode.at(["html_url"], decode.string), or: [
+      decode.at(["url"], decode.string),
     ])
   use url <- decode.then(url_decoder)
   let created_at_decoder =
