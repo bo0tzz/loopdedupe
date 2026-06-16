@@ -1,6 +1,8 @@
 import database/embeddings
 import database/item
+import database/sql
 import embeddings/voyage
+import github/types as github
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -89,6 +91,25 @@ pub fn handle_embeddings_job(
     |> result.map_error(fn(s) { EmbeddingsJobError(snag.line_print(s)) }),
   )
 
+  let model = voyage.Voyage4Large
+  let model_name = voyage.embed_model_to_string(model)
+
+  // Short-circuit if we already have an up-to-date embedding for this
+  // item under the current model. Cheap DB check; avoids paying for a
+  // voyage call on every re-backfill of unchanged items.
+  case sql.has_fresh_embedding(conn, item.github_id, model_name) {
+    Ok(pog.Returned(_, [sql.HasFreshEmbeddingRow(True)])) ->
+      Ok("skipped — already embedded")
+    _ -> embed_and_store(conn, item, model, model_name)
+  }
+}
+
+fn embed_and_store(
+  conn: pog.Connection,
+  item: github.Item,
+  model: voyage.EmbedModel,
+  model_name: String,
+) -> Result(String, EmbeddingsJobError) {
   // Raw body input. Stripping the template was tuned for E5-Mistral-7B
   // (and we then carried it forward into voyage-3-large), where template
   // overlap collapsed unrelated issues into a narrow ~97%-similar cone.
@@ -98,19 +119,17 @@ pub fn handle_embeddings_job(
   // the hardest-quartile (sparse-canonical) cases. Same reasoning as the
   // rerank-side strip-removal (see database/item.gleam build_text).
   let embed_text = item.title <> "\n\n" <> item.body
-  use #(embedding, model) <- result.try(
-    voyage.embed(embed_text, model: voyage.Voyage4Large)
+  use #(embedding, _) <- result.try(
+    voyage.embed(embed_text, model:)
     |> result.map_error(map_snag_to_error),
   )
-
-  let model_name = voyage.embed_model_to_string(model)
 
   use pog.Returned(rows, _) <- result.try(
     embeddings.insert_embedding(conn, item.github_id, embedding, model_name)
     |> result.map_error(fn(err) { string.inspect(err) |> map_string_to_error() }),
   )
 
-  let _ = similarity.enqueue(conn, embeddings_job.item_id)
+  let _ = similarity.enqueue(conn, item.github_id)
   Ok(int.to_string(rows) <> " embedding rows inserted")
 }
 

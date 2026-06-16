@@ -838,6 +838,66 @@ LIMIT 10;
   |> pog.execute(db)
 }
 
+/// A row you get from running the `has_fresh_embedding` query
+/// defined in `./src/database/sql/has_fresh_embedding.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type HasFreshEmbeddingRow {
+  HasFreshEmbeddingRow(has_fresh_embedding: Bool)
+}
+
+/// True iff we already have a usable embedding for this item — same model
+/// AND written after the item's last GitHub update, so the title/body that
+/// went into the vector can't be stale. Used as the short-circuit at the
+/// top of the embedding job so a re-backfill on an unchanged item doesn't
+/// pay for a voyage API call only to fail the duplicate-key insert.
+/// 
+/// Slight over-firing: github_updated_at moves on any update including
+/// labels/comments/etc that don't affect what we embed. The cost is one
+/// redundant voyage call on those events; cheap compared to a content-
+/// hash column + migration.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn has_fresh_embedding(
+  db: pog.Connection,
+  arg_1: Int,
+  arg_2: String,
+) -> Result(pog.Returned(HasFreshEmbeddingRow), pog.QueryError) {
+  let decoder = {
+    use has_fresh_embedding <- decode.field(0, decode.bool)
+    decode.success(HasFreshEmbeddingRow(has_fresh_embedding:))
+  }
+
+  "-- True iff we already have a usable embedding for this item — same model
+-- AND written after the item's last GitHub update, so the title/body that
+-- went into the vector can't be stale. Used as the short-circuit at the
+-- top of the embedding job so a re-backfill on an unchanged item doesn't
+-- pay for a voyage API call only to fail the duplicate-key insert.
+--
+-- Slight over-firing: github_updated_at moves on any update including
+-- labels/comments/etc that don't affect what we embed. The cost is one
+-- redundant voyage call on those events; cheap compared to a content-
+-- hash column + migration.
+SELECT EXISTS (
+    SELECT 1
+    FROM item_embeddings e
+             JOIN items i ON i.github_id = e.item_id
+    WHERE e.item_id = $1
+      AND e.model = $2
+      AND e.created_at >= i.github_updated_at
+) AS has_fresh_embedding;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.text(arg_2))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `has_rerank_cache` query
 /// defined in `./src/database/sql/has_rerank_cache.sql`.
 ///
