@@ -10,14 +10,7 @@ pub fn insert_embedding(
   embedding: List(Float),
   model: String,
 ) {
-  let embedding_str =
-    "["
-    <> {
-      embedding
-      |> list.map(float.to_string)
-      |> string.join(",")
-    }
-    <> "]"
+  let embedding_str = format_vector(embedding)
 
   // ON CONFLICT DO UPDATE so a content-change re-embed (title/body
   // edited on GitHub) overwrites the stale vector. The has_fresh_embedding
@@ -39,4 +32,17 @@ pub fn insert_embedding(
 
 pub fn compute_edges(db: pog.Connection, item_id: Int) {
   sql.compute_edges(db, item_id)
+}
+
+/// Serialise a vector to pgvector's text form so it can be passed as a
+/// text parameter and cast on the server (`$1::text::vector`). Public so
+/// the ad-hoc search endpoint can format query vectors the same way.
+pub fn format_vector(embedding: List(Float)) -> String {
+  "["
+  <> {
+    embedding
+    |> list.map(float.to_string)
+    |> string.join(",")
+  }
+  <> "]"
 }

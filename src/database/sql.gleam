@@ -1252,6 +1252,125 @@ LIMIT 200;
   |> pog.execute(db)
 }
 
+/// A row you get from running the `search_by_vector` query
+/// defined in `./src/database/sql/search_by_vector.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type SearchByVectorRow {
+  SearchByVectorRow(
+    id: Int,
+    similarity: Float,
+    title: String,
+    body: String,
+    state: ItemState,
+    state_reason: Option(ItemStateReason),
+  )
+}
+
+/// Ad-hoc similarity search: cosine top-N against item_embeddings for an
+/// arbitrary query vector, then chain-resolve each candidate to its
+/// canonical (following items.duplicate_of_number), drop dead-ends
+/// (canonicals that are themselves state_reason='duplicate' with no
+/// further pointer), and dedupe multiple chain members landing on the
+/// same canonical.
+/// 
+/// Same shape and semantics as suggest_duplicates.sql; the difference is
+/// the input — this one takes a raw vector (as text, cast on the fly)
+/// rather than an existing item_id whose stored embedding drives the
+/// lookup. Used by the /api/search + /search endpoints.
+///
+/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn search_by_vector(
+  db: pog.Connection,
+  arg_1: String,
+) -> Result(pog.Returned(SearchByVectorRow), pog.QueryError) {
+  let decoder = {
+    use id <- decode.field(0, decode.int)
+    use similarity <- decode.field(1, decode.float)
+    use title <- decode.field(2, decode.string)
+    use body <- decode.field(3, decode.string)
+    use state <- decode.field(4, item_state_decoder())
+    use state_reason <- decode.field(
+      5,
+      decode.optional(item_state_reason_decoder()),
+    )
+    decode.success(SearchByVectorRow(
+      id:,
+      similarity:,
+      title:,
+      body:,
+      state:,
+      state_reason:,
+    ))
+  }
+
+  "-- Ad-hoc similarity search: cosine top-N against item_embeddings for an
+-- arbitrary query vector, then chain-resolve each candidate to its
+-- canonical (following items.duplicate_of_number), drop dead-ends
+-- (canonicals that are themselves state_reason='duplicate' with no
+-- further pointer), and dedupe multiple chain members landing on the
+-- same canonical.
+--
+-- Same shape and semantics as suggest_duplicates.sql; the difference is
+-- the input — this one takes a raw vector (as text, cast on the fly)
+-- rather than an existing item_id whose stored embedding drives the
+-- lookup. Used by the /api/search + /search endpoints.
+WITH cosine_top AS (
+    SELECT item_id,
+           1.0 - (embedding <=> $1::text::vector) AS similarity
+    FROM item_embeddings
+    ORDER BY embedding <=> $1::text::vector ASC
+    LIMIT 200
+),
+chain_seed AS (SELECT DISTINCT item_id AS orig_id FROM cosine_top),
+chain AS (
+    WITH RECURSIVE walk(orig_id, current_id, depth) AS (
+        SELECT orig_id, orig_id, 0 FROM chain_seed
+        UNION ALL
+        SELECT w.orig_id, target.github_id, w.depth + 1
+        FROM walk w
+                 JOIN items source ON source.github_id = w.current_id
+                 JOIN items target ON target.number = source.duplicate_of_number
+        WHERE source.duplicate_of_number IS NOT NULL AND w.depth < 10
+    )
+    SELECT * FROM walk
+),
+canonical AS (
+    SELECT DISTINCT ON (orig_id) orig_id, current_id AS canonical_id
+    FROM chain ORDER BY orig_id, depth DESC
+),
+resolved AS (
+    SELECT c.canonical_id AS id,
+           ct.similarity   AS similarity,
+           canon.title,
+           canon.body,
+           canon.state,
+           canon.state_reason
+    FROM cosine_top ct
+             JOIN canonical c ON c.orig_id = ct.item_id
+             JOIN items canon ON canon.github_id = c.canonical_id
+    WHERE canon.state_reason IS DISTINCT FROM 'duplicate'
+),
+deduped AS (
+    SELECT DISTINCT ON (id) id, similarity, title, body, state, state_reason
+    FROM resolved
+    ORDER BY id, similarity DESC
+)
+SELECT id, similarity, title, body, state, state_reason
+FROM deduped
+ORDER BY similarity DESC
+LIMIT 200;
+"
+  |> pog.query
+  |> pog.parameter(pog.text(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `select_id_by_number` query
 /// defined in `./src/database/sql/select_id_by_number.sql`.
 ///

@@ -10,7 +10,7 @@ import logging
 import pog
 import snag
 
-fn sql_into_state(sql: sql.ItemState) -> types.ItemState {
+pub fn sql_into_state(sql: sql.ItemState) -> types.ItemState {
   case sql {
     sql.Open -> types.Open
     sql.Closed -> types.Closed
@@ -24,7 +24,7 @@ fn state_into_sql(state: types.ItemState) -> sql.ItemState {
   }
 }
 
-fn sql_into_state_reason(
+pub fn sql_into_state_reason(
   sql: Option(sql.ItemStateReason),
 ) -> Option(types.ItemStateReason) {
   option.map(sql, fn(reason) {

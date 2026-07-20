@@ -418,13 +418,14 @@ pub fn item_detail(ctx: Context, id: String) -> Response {
 
 // --- HTML helpers ------------------------------------------------------------
 
-fn page(title: String, sections: List(String)) -> String {
+pub fn page(title: String, sections: List(String)) -> String {
   "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>"
   <> escape(title)
   <> "</title>"
   <> style_block()
   <> "<script src=\"https://unpkg.com/htmx.org@1.9.10\"></script>"
   <> "</head><body><header><a href=\"/\"><strong>loopdedupe</strong></a>"
+  <> " <a href=\"/search\" class=\"nav-link\">search</a>"
   <> " <a href=\"/judgments\" class=\"nav-link\">judgments</a>"
   <> " <a href=\"/backfills\" class=\"nav-link\">backfills</a>"
   <> "</header><main>"
@@ -534,6 +535,10 @@ fn style_block() -> String {
     @media (prefers-color-scheme: dark) { .confidence-moderate { color: #f6c873; } }
     .confidence-weak { color: #c33; }
     @media (prefers-color-scheme: dark) { .confidence-weak { color: #f88; } }
+    .search-form { display: flex; flex-direction: column; gap: 0.6em; margin-bottom: 1.5em; }
+    .search-form textarea { font: inherit; padding: 0.6em; border: 1px solid #888; border-radius: 4px; background: transparent; color: inherit; resize: vertical; }
+    .search-form button { align-self: flex-start; padding: 0.5em 1em; font: inherit; border: 1px solid #888; background: transparent; color: inherit; border-radius: 4px; cursor: pointer; }
+    .search-form button:hover { background: rgba(0, 100, 200, 0.08); border-color: #06c; }
   </style>"
 }
 
@@ -771,7 +776,7 @@ fn item_body(it: github.Item) -> String {
   "<h2>Body</h2><div class=\"item-body\">" <> escape(it.body) <> "</div>"
 }
 
-fn candidates_table(items: List(github.SuggestedDuplicate)) -> String {
+pub fn candidates_table(items: List(github.SuggestedDuplicate)) -> String {
   case items {
     [] -> "<p><em>No candidates above threshold.</em></p>"
     _ ->
@@ -871,7 +876,7 @@ fn format_datetime(t: Timestamp) -> String {
   timestamp.to_rfc3339(t, duration.seconds(0)) |> string.slice(0, 16)
 }
 
-fn escape(s: String) -> String {
+pub fn escape(s: String) -> String {
   s
   |> string.replace("&", "&amp;")
   |> string.replace("<", "&lt;")

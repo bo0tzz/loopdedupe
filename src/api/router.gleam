@@ -1,5 +1,6 @@
 import api/dashboard
 import api/items
+import api/search
 import api/webhook
 import config
 import database/sql
@@ -50,6 +51,9 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
     Get, ["issues", n] -> dashboard.redirect_by_number(ctx, sql.Issue, n)
     Get, ["discussions", n] ->
       dashboard.redirect_by_number(ctx, sql.Discussion, n)
+    Post, ["api", "search"] -> search.handle_api(req, ctx)
+    Get, ["search"] -> search.handle_ui(req, ctx)
+    Post, ["search"] -> search.handle_ui(req, ctx)
     _, _ -> wisp.not_found()
   }
 }
