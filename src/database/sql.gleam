@@ -1,6 +1,6 @@
 //// This module contains the code to run the sql queries defined in
 //// `./src/database/sql`.
-//// > 🐿️ This module was generated automatically using v4.6.0 of
+//// > 🐿️ This module was generated automatically using v4.7.0 of
 //// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ////
 
@@ -12,7 +12,7 @@ import pog
 /// A row you get from running the `backfill_status` query
 /// defined in `./src/database/sql/backfill_status.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type BackfillStatusRow {
@@ -45,7 +45,7 @@ pub type BackfillStatusRow {
 }
 
 /// One-row summary of the backfill pipeline state for the /backfills page.
-/// 
+///
 /// For the paginated backfill queues, the headline 'how far along is it'
 /// signal isn't pending-count (that's just the next-page job) but the
 /// length of the current cursor chain. A chain starts at a job with
@@ -54,7 +54,7 @@ pub type BackfillStatusRow {
 /// chain-start within the last hour as 'current'; older chains are dormant
 /// and we report no active chain.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn backfill_status(
@@ -183,7 +183,7 @@ SELECT
 /// Runs the `clear_author` query
 /// defined in `./src/database/sql/clear_author.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn clear_author(
@@ -205,7 +205,7 @@ WHERE github_id = $1;
 /// Runs the `clear_closed_by` query
 /// defined in `./src/database/sql/clear_closed_by.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn clear_closed_by(
@@ -227,7 +227,7 @@ WHERE github_id = $1;
 /// Runs the `clear_duplicate_of` query
 /// defined in `./src/database/sql/clear_duplicate_of.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn clear_duplicate_of(
@@ -248,18 +248,18 @@ WHERE github_id = $1;
 
 /// Recomputes the outgoing similarity edges for one item. Idempotent via
 /// ON CONFLICT so this can re-run for an existing source.
-/// 
+///
 /// kNN=200 (up from 50): at 50, ~20% of ground-truth dupe pairs were cut by
 /// the limit despite scoring well above threshold. 200 keeps the storage
 /// bounded but recovers the long tail.
-/// 
+///
 /// Threshold=0.55: with voyage-4-large + input_type=document the random
 /// noise floor median is ~0.52, so 0.55 sits just above it and recovers
 /// the low-end tail of real dupes scoring 0.55-0.65. False-positive pairs
 /// at this level get filtered by the candidates-feed's "at least one
 /// open" / chain-resolution logic and the dashboard's 0.80 display floor.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn compute_edges(
@@ -310,7 +310,7 @@ DO UPDATE SET similarity = EXCLUDED.similarity, edge_type = EXCLUDED.edge_type
 /// A row you get from running the `dashboard_recent_items` query
 /// defined in `./src/database/sql/dashboard_recent_items.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type DashboardRecentItemsRow {
@@ -329,7 +329,7 @@ pub type DashboardRecentItemsRow {
 /// Runs the `dashboard_recent_items` query
 /// defined in `./src/database/sql/dashboard_recent_items.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn dashboard_recent_items(
@@ -381,7 +381,7 @@ LIMIT $1;
 /// A row you get from running the `dashboard_stats` query
 /// defined in `./src/database/sql/dashboard_stats.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type DashboardStatsRow {
@@ -402,7 +402,7 @@ pub type DashboardStatsRow {
 /// Runs the `dashboard_stats` query
 /// defined in `./src/database/sql/dashboard_stats.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn dashboard_stats(
@@ -452,7 +452,7 @@ pub fn dashboard_stats(
 /// A row you get from running the `dashboard_top_pairs` query
 /// defined in `./src/database/sql/dashboard_top_pairs.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type DashboardTopPairsRow {
@@ -480,28 +480,28 @@ pub type DashboardTopPairsRow {
 
 /// Resolves each side of every similarity edge through the duplicate_of chain
 /// to its canonical, then filters and deduplicates to actionable pairs.
-/// 
+///
 /// Performance strategy: we don't run the full pipeline over all ~2M edges.
 /// Instead we pre-filter to the top-K most-similar edges (the universe the
 /// dashboard could actually surface), then resolve / filter / dedup only
 /// those. The over-fetch factor of ~20x keeps a buffer for pairs that
 /// collapse via canonical resolution or get filtered out.
-/// 
+///
 /// Chain walk: items.duplicate_of_number (per-repo number of the canonical) →
 /// items.number (lookup). Dangling refs (PRs, cross-repo, typos) drop out of
 /// the join naturally because the target won't be in items.
-/// 
+///
 /// A pair is actionable when:
 /// - the two canonicals differ (otherwise the edge just connects two
 /// instances of the same logical issue),
 /// - at least one canonical is open (the maintainer can do something),
 /// - the pair isn't already recorded as a known dupe in item_duplicates.
-/// 
+///
 /// We still drop pairs where either side is state_reason='duplicate' WITHOUT
 /// a captured duplicate_of_number — those are dupes we know about but can't
 /// resolve. They reappear once the canonical is captured.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn dashboard_top_pairs(
@@ -697,7 +697,7 @@ LIMIT $1;
 /// Runs the `delete_judgment` query
 /// defined in `./src/database/sql/delete_judgment.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn delete_judgment(
@@ -724,7 +724,7 @@ WHERE source_item_id = LEAST($1::bigint, $2::bigint)
 /// A row you get from running the `get_rerank_cache` query
 /// defined in `./src/database/sql/get_rerank_cache.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type GetRerankCacheRow {
@@ -745,12 +745,12 @@ pub type GetRerankCacheRow {
 /// collapsing on the same canonical dedupe to one row keeping the highest
 /// rerank score.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn get_rerank_cache(
   db: pog.Connection,
-  arg_1: Int,
+  source_item_id: Int,
 ) -> Result(pog.Returned(GetRerankCacheRow), pog.QueryError) {
   let decoder = {
     use target_item_id <- decode.field(0, decode.int)
@@ -833,7 +833,7 @@ ORDER BY relevance_score DESC
 LIMIT 10;
 "
   |> pog.query
-  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.int(source_item_id))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -841,7 +841,7 @@ LIMIT 10;
 /// A row you get from running the `has_fresh_embedding` query
 /// defined in `./src/database/sql/has_fresh_embedding.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type HasFreshEmbeddingRow {
@@ -853,19 +853,19 @@ pub type HasFreshEmbeddingRow {
 /// went into the vector can't be stale. Used as the short-circuit at the
 /// top of the embedding job so a re-backfill on an unchanged item doesn't
 /// pay for a voyage API call only to fail the duplicate-key insert.
-/// 
+///
 /// Slight over-firing: github_updated_at moves on any update including
 /// labels/comments/etc that don't affect what we embed. The cost is one
 /// redundant voyage call on those events; cheap compared to a content-
 /// hash column + migration.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn has_fresh_embedding(
   db: pog.Connection,
-  arg_1: Int,
-  arg_2: String,
+  e_item_id: Int,
+  e_model: String,
 ) -> Result(pog.Returned(HasFreshEmbeddingRow), pog.QueryError) {
   let decoder = {
     use has_fresh_embedding <- decode.field(0, decode.bool)
@@ -892,8 +892,8 @@ SELECT EXISTS (
 ) AS has_fresh_embedding;
 "
   |> pog.query
-  |> pog.parameter(pog.int(arg_1))
-  |> pog.parameter(pog.text(arg_2))
+  |> pog.parameter(pog.int(e_item_id))
+  |> pog.parameter(pog.text(e_model))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -901,7 +901,7 @@ SELECT EXISTS (
 /// A row you get from running the `has_rerank_cache` query
 /// defined in `./src/database/sql/has_rerank_cache.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type HasRerankCacheRow {
@@ -911,12 +911,12 @@ pub type HasRerankCacheRow {
 /// Runs the `has_rerank_cache` query
 /// defined in `./src/database/sql/has_rerank_cache.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn has_rerank_cache(
   db: pog.Connection,
-  arg_1: Int,
+  source_item_id: Int,
 ) -> Result(pog.Returned(HasRerankCacheRow), pog.QueryError) {
   let decoder = {
     use cached <- decode.field(0, decode.bool)
@@ -928,7 +928,7 @@ pub fn has_rerank_cache(
 ) AS cached;
 "
   |> pog.query
-  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.int(source_item_id))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -936,7 +936,7 @@ pub fn has_rerank_cache(
 /// Runs the `insert_judgment` query
 /// defined in `./src/database/sql/insert_judgment.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn insert_judgment(
@@ -962,7 +962,7 @@ ON CONFLICT (source_item_id, target_item_id, verdict) DO NOTHING;
 /// Runs the `insert_rerank_score` query
 /// defined in `./src/database/sql/insert_rerank_score.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn insert_rerank_score(
@@ -990,7 +990,7 @@ DO UPDATE SET relevance_score = EXCLUDED.relevance_score,
 /// Runs the `invalidate_rerank_cache` query
 /// defined in `./src/database/sql/invalidate_rerank_cache.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn invalidate_rerank_cache(
@@ -1010,7 +1010,7 @@ pub fn invalidate_rerank_cache(
 /// A row you get from running the `latest_discussion_update` query
 /// defined in `./src/database/sql/latest_discussion_update.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type LatestDiscussionUpdateRow {
@@ -1020,7 +1020,7 @@ pub type LatestDiscussionUpdateRow {
 /// Runs the `latest_discussion_update` query
 /// defined in `./src/database/sql/latest_discussion_update.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn latest_discussion_update(
@@ -1043,7 +1043,7 @@ WHERE item_type = 'discussion';
 /// A row you get from running the `latest_issue_update` query
 /// defined in `./src/database/sql/latest_issue_update.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type LatestIssueUpdateRow {
@@ -1053,7 +1053,7 @@ pub type LatestIssueUpdateRow {
 /// Runs the `latest_issue_update` query
 /// defined in `./src/database/sql/latest_issue_update.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn latest_issue_update(
@@ -1076,7 +1076,7 @@ WHERE item_type = 'issue';
 /// A row you get from running the `list_items` query
 /// defined in `./src/database/sql/list_items.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type ListItemsRow {
@@ -1100,7 +1100,7 @@ pub type ListItemsRow {
 /// Runs the `list_items` query
 /// defined in `./src/database/sql/list_items.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn list_items(
@@ -1149,7 +1149,7 @@ pub fn list_items(
 /// A row you get from running the `list_judgments` query
 /// defined in `./src/database/sql/list_judgments.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type ListJudgmentsRow {
@@ -1176,7 +1176,7 @@ pub type ListJudgmentsRow {
 /// Runs the `list_judgments` query
 /// defined in `./src/database/sql/list_judgments.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn list_judgments(
@@ -1255,7 +1255,7 @@ LIMIT 200;
 /// A row you get from running the `search_by_vector` query
 /// defined in `./src/database/sql/search_by_vector.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type SearchByVectorRow {
@@ -1275,13 +1275,13 @@ pub type SearchByVectorRow {
 /// (canonicals that are themselves state_reason='duplicate' with no
 /// further pointer), and dedupe multiple chain members landing on the
 /// same canonical.
-/// 
+///
 /// Same shape and semantics as suggest_duplicates.sql; the difference is
 /// the input — this one takes a raw vector (as text, cast on the fly)
 /// rather than an existing item_id whose stored embedding drives the
 /// lookup. Used by the /api/search + /search endpoints.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn search_by_vector(
@@ -1374,7 +1374,7 @@ LIMIT 200;
 /// A row you get from running the `select_id_by_number` query
 /// defined in `./src/database/sql/select_id_by_number.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type SelectIdByNumberRow {
@@ -1384,13 +1384,13 @@ pub type SelectIdByNumberRow {
 /// Resolve a (number, item_type) tuple to its internal github_id, used by
 /// the human-friendly /issues/N and /discussions/N redirect routes.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn select_id_by_number(
   db: pog.Connection,
-  arg_1: Int,
-  arg_2: ItemType,
+  number: Int,
+  item_type: ItemType,
 ) -> Result(pog.Returned(SelectIdByNumberRow), pog.QueryError) {
   let decoder = {
     use github_id <- decode.field(0, decode.int)
@@ -1406,8 +1406,8 @@ WHERE number = $1
 LIMIT 1;
 "
   |> pog.query
-  |> pog.parameter(pog.int(arg_1))
-  |> pog.parameter(item_type_encoder(arg_2))
+  |> pog.parameter(pog.int(number))
+  |> pog.parameter(item_type_encoder(item_type))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -1415,7 +1415,7 @@ LIMIT 1;
 /// A row you get from running the `select_item` query
 /// defined in `./src/database/sql/select_item.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type SelectItemRow {
@@ -1435,7 +1435,7 @@ pub type SelectItemRow {
 /// Runs the `select_item` query
 /// defined in `./src/database/sql/select_item.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn select_item(
@@ -1481,13 +1481,13 @@ WHERE github_id = $1;
 /// Runs the `set_author` query
 /// defined in `./src/database/sql/set_author.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn set_author(
   db: pog.Connection,
   arg_1: Int,
-  arg_2: String,
+  author_login: String,
 ) -> Result(pog.Returned(Nil), pog.QueryError) {
   let decoder = decode.map(decode.dynamic, fn(_) { Nil })
 
@@ -1497,7 +1497,7 @@ WHERE github_id = $1;
 "
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
-  |> pog.parameter(pog.text(arg_2))
+  |> pog.parameter(pog.text(author_login))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -1505,13 +1505,13 @@ WHERE github_id = $1;
 /// Runs the `set_closed_by` query
 /// defined in `./src/database/sql/set_closed_by.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn set_closed_by(
   db: pog.Connection,
   arg_1: Int,
-  arg_2: String,
+  closed_by: String,
 ) -> Result(pog.Returned(Nil), pog.QueryError) {
   let decoder = decode.map(decode.dynamic, fn(_) { Nil })
 
@@ -1521,7 +1521,7 @@ WHERE github_id = $1;
 "
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
-  |> pog.parameter(pog.text(arg_2))
+  |> pog.parameter(pog.text(closed_by))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -1529,13 +1529,13 @@ WHERE github_id = $1;
 /// Runs the `set_duplicate_of` query
 /// defined in `./src/database/sql/set_duplicate_of.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn set_duplicate_of(
   db: pog.Connection,
   arg_1: Int,
-  arg_2: Int,
+  duplicate_of_number: Int,
 ) -> Result(pog.Returned(Nil), pog.QueryError) {
   let decoder = decode.map(decode.dynamic, fn(_) { Nil })
 
@@ -1545,7 +1545,7 @@ WHERE github_id = $1;
 "
   |> pog.query
   |> pog.parameter(pog.int(arg_1))
-  |> pog.parameter(pog.int(arg_2))
+  |> pog.parameter(pog.int(duplicate_of_number))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -1553,7 +1553,7 @@ WHERE github_id = $1;
 /// A row you get from running the `suggest_duplicates` query
 /// defined in `./src/database/sql/suggest_duplicates.sql`.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type SuggestDuplicatesRow {
@@ -1571,18 +1571,18 @@ pub type SuggestDuplicatesRow {
 /// $2, with each candidate resolved through the duplicate_of chain to its
 /// canonical, dead-ends filtered, and chain-collapse deduped (keep best
 /// cosine across all chain members landing on the same canonical).
-/// 
+///
 /// We resolve at the cosine stage (before rerank) so that:
 /// - rerank scores are computed against the canonical's body, not an
 /// intermediate's body, and stored against the canonical id
 /// - dead-end and judged pairs are dropped before paying the rerank cost
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn suggest_duplicates(
   db: pog.Connection,
-  arg_1: Int,
+  source_item_id: Int,
   arg_2: Float,
 ) -> Result(pog.Returned(SuggestDuplicatesRow), pog.QueryError) {
   let decoder = {
@@ -1683,7 +1683,7 @@ ORDER BY similarity DESC
 LIMIT 200;
 "
   |> pog.query
-  |> pog.parameter(pog.int(arg_1))
+  |> pog.parameter(pog.int(source_item_id))
   |> pog.parameter(pog.float(arg_2))
   |> pog.returning(decoder)
   |> pog.execute(db)
@@ -1692,7 +1692,7 @@ LIMIT 200;
 /// Runs the `upsert_item` query
 /// defined in `./src/database/sql/upsert_item.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn upsert_item(
@@ -1739,7 +1739,7 @@ ON CONFLICT (github_id) DO UPDATE
 /// Runs the `upsert_item_without_reason` query
 /// defined in `./src/database/sql/upsert_item_without_reason.sql`.
 ///
-/// > 🐿️ This function was generated automatically using v4.6.0 of
+/// > 🐿️ This function was generated automatically using v4.7.0 of
 /// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub fn upsert_item_without_reason(
@@ -1785,7 +1785,7 @@ ON CONFLICT (github_id) DO UPDATE
 
 /// Corresponds to the Postgres `item_state` enum.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type ItemState {
@@ -1812,7 +1812,7 @@ fn item_state_encoder(item_state) -> pog.Value {
 
 /// Corresponds to the Postgres `item_state_reason` enum.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type ItemStateReason {
@@ -1851,7 +1851,7 @@ fn item_state_reason_encoder(item_state_reason) -> pog.Value {
 
 /// Corresponds to the Postgres `item_type` enum.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type ItemType {
@@ -1878,7 +1878,7 @@ fn item_type_encoder(item_type) -> pog.Value {
 
 /// Corresponds to the Postgres `pair_verdict` enum.
 ///
-/// > 🐿️ This type definition was generated automatically using v4.6.0 of the
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
 /// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
 ///
 pub type PairVerdict {
