@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.10](https://github.com/bo0tzz/loopdedupe/compare/v0.0.9...v0.0.10) (2026-07-20)
+
+
+### Features
+
+* **search:** ad-hoc similarity search over the corpus ([1922daa](https://github.com/bo0tzz/loopdedupe/commit/1922daa9ca34b1b881bea1be209d943087efd702))
+
+
+### Bug Fixes
+
+* **embeddings:** short-circuit when item already has a fresh embedding ([6ce7bae](https://github.com/bo0tzz/loopdedupe/commit/6ce7baea3076d18300ba9288e9010def250231e9))
+
 ## [0.0.9](https://github.com/bo0tzz/loopdedupe/compare/v0.0.8...v0.0.9) (2026-06-15)
 
 
