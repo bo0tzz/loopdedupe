@@ -10,6 +10,7 @@ import gleam/json
 import gleam/list
 import gleam/result
 import gleam/string
+import logging
 import snag
 
 pub type EmbedModel {
@@ -85,8 +86,9 @@ pub type Embedding {
 fn embedding_decoder() -> decode.Decoder(Embedding) {
   use object <- decode.field("object", decode.string)
   case object {
-    "embedding" -> ""
-    other -> echo "expected embedding but got " <> other
+    "embedding" -> Nil
+    other ->
+      logging.log(logging.Warning, "expected embedding but got " <> other)
   }
   use index <- decode.field("index", decode.int)
   use embedding <- decode.field("embedding", decode.list(decode.float))
@@ -100,8 +102,8 @@ type EmbedResponse {
 fn embed_response_decoder() -> decode.Decoder(EmbedResponse) {
   use object <- decode.field("object", decode.string)
   case object {
-    "list" -> ""
-    other -> echo "expected list but got " <> other
+    "list" -> Nil
+    other -> logging.log(logging.Warning, "expected list but got " <> other)
   }
   use model <- decode.field("model", embed_model_decoder())
   use data <- decode.field("data", decode.list(embedding_decoder()))
@@ -114,7 +116,7 @@ fn expect_json_response(
 ) -> Result(a, snag.Snag) {
   use <- bool.lazy_guard(resp.status != 200, fn() {
     let error = snag.new("expected 200 but got " <> int.to_string(resp.status))
-    echo snag.line_print(error)
+    logging.log(logging.Warning, snag.line_print(error))
     Error(error)
   })
   let content_type = response.get_header(resp, "content-type")
