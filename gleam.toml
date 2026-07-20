@@ -35,4 +35,8 @@ jose = ">= 1.11.12 and < 2.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
-squirrel = ">= 4.6.0 and < 5.0.0"
+# squirrel 4.7 needs gleam_stdlib 1.x. We're blocked on stdlib 1.x by
+# squall's tight pin (gleam_stdlib >= 0.65 and < 0.66 in squall 1.1.2).
+# Widen this cap when squall loosens its stdlib constraint — that pull
+# also unblocks mist 6.x and wisp 2.2.x.
+squirrel = ">= 4.6.0 and < 4.7.0"
