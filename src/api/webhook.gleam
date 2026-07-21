@@ -1,7 +1,9 @@
 import api/middleware
+import config
 import database/item
 import database/sql
 import github/types as github
+import gleam/dynamic/decode
 import gleam/http.{Post}
 import gleam/json
 import gleam/list
@@ -11,6 +13,7 @@ import gleam/string
 import gleam/time/duration
 import gleam/time/timestamp
 import jobs/backfill
+import jobs/bot_reply
 import jobs/discussion_backfill
 import jobs/embeddings
 import snag
@@ -36,10 +39,65 @@ pub fn handle(req: Request, ctx: Context) -> Response {
   case event {
     Ok("issues") -> respond(handle_issue(body, ctx))
     Ok("discussion") -> respond(handle_discussion(body, ctx))
+    Ok("issue_comment") ->
+      respond(handle_comment(body, ctx, github.issue_comment_webhook_decoder()))
+    Ok("discussion_comment") ->
+      respond(handle_comment(
+        body,
+        ctx,
+        github.discussion_comment_webhook_decoder(),
+      ))
     _ ->
       wisp.response(200)
       |> wisp.string_body("ignored event type")
   }
+}
+
+// Bot mention flow: a human wrote a comment containing the bot handle on
+// an issue, PR, or discussion. Enqueue a reply job carrying the parent's
+// title+body (search query) so the worker never needs to refetch. Bot
+// authors are skipped so we can't loop on our own replies.
+fn handle_comment(
+  body: String,
+  ctx: Context,
+  decoder: decode.Decoder(github.CommentWebhook),
+) -> Result(String, snag.Snag) {
+  use webhook <- result.try(
+    json.parse(body, decoder) |> snag.map_error(string.inspect),
+  )
+  let handle = bot_handle()
+  let mentioned =
+    string.contains(
+      string.lowercase(webhook.comment_body),
+      string.lowercase(handle),
+    )
+  case webhook.action, webhook.author_is_bot, mentioned {
+    "created", False, True -> {
+      let kind = case webhook.discussion_node_id, webhook.is_pull_request {
+        option.Some(_), _ -> "discussion"
+        option.None, True -> "pr"
+        option.None, False -> "issue"
+      }
+      let _ =
+        bot_reply.enqueue(
+          ctx,
+          bot_reply.BotReplyJob(
+            kind:,
+            number: webhook.number,
+            comment_id: webhook.comment_id,
+            title: webhook.title,
+            body: webhook.body,
+            discussion_node_id: webhook.discussion_node_id,
+          ),
+        )
+      Ok("bot reply enqueued")
+    }
+    _, _, _ -> Ok("ignored")
+  }
+}
+
+fn bot_handle() -> String {
+  config.try_env(config.BotHandle) |> result.unwrap("@loopdedupe")
 }
 
 fn respond(result: Result(String, snag.Snag)) -> Response {

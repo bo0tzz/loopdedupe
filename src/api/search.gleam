@@ -77,7 +77,7 @@ pub fn handle_ui(req: Request, ctx: Context) -> Response {
 
 // --- Core pipeline ----------------------------------------------------------
 
-fn do_search(
+pub fn do_search(
   ctx: Context,
   query_text: String,
 ) -> Result(List(github.SuggestedDuplicate), String) {

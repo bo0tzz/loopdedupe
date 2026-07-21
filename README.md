@@ -38,8 +38,15 @@ Configure the repo webhook to `POST /api/webhooks/github`:
 - **Which events**: select **"Let me select individual events"** and tick exactly:
   - **Issues** — covers every issue action (opened / edited / closed / reopened / labeled / etc.). The handler upserts the item and re-embeds on every action; `closed` additionally triggers an incremental backfill to capture timeline-derived signals (canonical pointer, closer, MarkedAsDuplicate).
   - **Discussions** — same shape as Issues, but the handler silently no-ops for any discussion outside the `feature-request` category (other categories aren't dedupe candidates).
+  - **Issue comments** + **Discussion comments** — for the mention bot (below). Only comments containing the bot handle trigger anything; everything else is discarded.
 
-Don't subscribe to other events (Issue comments, Discussion comments, Pushes, etc.) — the handler returns 200 for any unknown `X-GitHub-Event` so deliveries won't error, but they're discarded. Just Issues + Discussions is enough.
+Don't subscribe to other events (Pushes, etc.) — the handler returns 200 for any unknown `X-GitHub-Event` so deliveries won't error, but they're discarded.
+
+### Mention bot
+
+Commenting `@loopdedupe` (override with the `BOT_HANDLE` env var) on any issue, PR, or discussion makes the bot search the corpus with the parent item's title+body and reply with the strongest matches (rerank score ≥ 50%, max 5, parent excluded). If nothing clears the floor it says so rather than staying silent. Mention again to re-run — e.g. after editing the description.
+
+Requires the GitHub App to have **Issues: write** (covers PR conversation comments too) and **Discussions: write** permissions. Replies embed an invisible `<!-- loopdedupe:reply:<comment_id> -->` marker used to keep retries from double-posting — no state is stored outside GitHub itself.
 
 ## Container
 

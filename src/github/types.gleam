@@ -230,6 +230,98 @@ pub fn discussion_webhook_decoder() {
   decode.success(DiscussionWebhook(action:, item:, category_slug:))
 }
 
+// A comment-created webhook on an issue, PR conversation, or discussion,
+// reduced to what the bot mention flow needs. `issue_comment` events carry
+// PR conversation comments too — the payload's issue object has a
+// `pull_request` key iff the thread is a PR.
+pub type CommentWebhook {
+  CommentWebhook(
+    action: String,
+    comment_id: Int,
+    comment_body: String,
+    author_is_bot: Bool,
+    number: Int,
+    title: String,
+    body: String,
+    is_pull_request: Bool,
+    // GraphQL node id of the parent discussion; None for issues/PRs.
+    // Needed because addDiscussionComment only accepts node ids.
+    discussion_node_id: Option(String),
+  )
+}
+
+pub fn issue_comment_webhook_decoder() -> decode.Decoder(CommentWebhook) {
+  use action <- decode.field("action", decode.string)
+  use comment_id <- decode.field("comment", decode.at(["id"], decode.int))
+  use comment_body <- decode.field(
+    "comment",
+    decode.at(["body"], safe_string()),
+  )
+  use author_type <- decode.field(
+    "comment",
+    decode.at(["user", "type"], decode.string),
+  )
+  use number <- decode.field("issue", decode.at(["number"], decode.int))
+  use title <- decode.field("issue", decode.at(["title"], safe_string()))
+  use body <- decode.field(
+    "issue",
+    decode.optionally_at(["body"], "", safe_string()),
+  )
+  use pr_url <- decode.field(
+    "issue",
+    decode.optionally_at(
+      ["pull_request", "url"],
+      option.None,
+      decode.optional(decode.string),
+    ),
+  )
+  decode.success(CommentWebhook(
+    action:,
+    comment_id:,
+    comment_body:,
+    author_is_bot: author_type == "Bot",
+    number:,
+    title:,
+    body:,
+    is_pull_request: option.is_some(pr_url),
+    discussion_node_id: option.None,
+  ))
+}
+
+pub fn discussion_comment_webhook_decoder() -> decode.Decoder(CommentWebhook) {
+  use action <- decode.field("action", decode.string)
+  use comment_id <- decode.field("comment", decode.at(["id"], decode.int))
+  use comment_body <- decode.field(
+    "comment",
+    decode.at(["body"], safe_string()),
+  )
+  use author_type <- decode.field(
+    "comment",
+    decode.at(["user", "type"], decode.string),
+  )
+  use number <- decode.field("discussion", decode.at(["number"], decode.int))
+  use title <- decode.field("discussion", decode.at(["title"], safe_string()))
+  use body <- decode.field(
+    "discussion",
+    decode.optionally_at(["body"], "", safe_string()),
+  )
+  use node_id <- decode.field(
+    "discussion",
+    decode.at(["node_id"], decode.string),
+  )
+  decode.success(CommentWebhook(
+    action:,
+    comment_id:,
+    comment_body:,
+    author_is_bot: author_type == "Bot",
+    number:,
+    title:,
+    body:,
+    is_pull_request: False,
+    discussion_node_id: option.Some(node_id),
+  ))
+}
+
 pub type ItemType {
   Issue
   Discussion

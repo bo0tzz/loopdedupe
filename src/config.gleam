@@ -12,6 +12,7 @@ pub type Env {
   GithubAppInstallationId
   GithubAppPrivateKey
   VoyageApiKey
+  BotHandle
 }
 
 fn env_to_string(env: Env) -> String {
@@ -25,6 +26,7 @@ fn env_to_string(env: Env) -> String {
     GithubAppId -> "GITHUB_APP_ID"
     GithubAppInstallationId -> "GITHUB_APP_INSTALLATION_ID"
     GithubAppPrivateKey -> "GITHUB_APP_PRIVATE_KEY"
+    BotHandle -> "BOT_HANDLE"
   }
 }
 
