@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.11](https://github.com/bo0tzz/loopdedupe/compare/v0.0.10...v0.0.11) (2026-07-21)
+
+
+### Features
+
+* **search:** expose number + item_type instead of github_id ([600a065](https://github.com/bo0tzz/loopdedupe/commit/600a065e947fc20509d554e922031e29bf611226))
+
 ## [0.0.10](https://github.com/bo0tzz/loopdedupe/compare/v0.0.9...v0.0.10) (2026-07-20)
 
 
