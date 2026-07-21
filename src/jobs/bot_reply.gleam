@@ -204,13 +204,16 @@ fn render_reply(
             github.Issue -> #("issues", "issue")
             github.Discussion -> #("discussions", "discussion")
           }
+          // redirect.github.com resolves to the same page but doesn't
+          // register a cross-reference, so the linked threads don't get
+          // "mentioned this" timeline entries for every bot suggestion.
           "- **"
           <> format_percent(h.similarity)
           <> "** [#"
           <> int.to_string(h.number)
           <> " — "
           <> h.title
-          <> "](https://github.com/immich-app/immich/"
+          <> "](https://redirect.github.com/immich-app/immich/"
           <> path
           <> "/"
           <> int.to_string(h.number)
