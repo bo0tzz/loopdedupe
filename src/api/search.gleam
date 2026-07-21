@@ -103,7 +103,10 @@ fn rerank_and_take(
   cosine: List(sql.SearchByVectorRow),
   take: Int,
 ) -> List(github.SuggestedDuplicate) {
-  let docs = list.map(cosine, fn(r) { r.title <> "\n\n" <> r.body })
+  let docs =
+    list.map(cosine, fn(r) {
+      voyage.clamp_rerank_doc(r.title <> "\n\n" <> r.body)
+    })
   case voyage.rerank(query_text, docs) {
     Ok(scored) -> {
       let indexed = list.index_map(cosine, fn(row, i) { #(i, row) })

@@ -166,6 +166,16 @@ fn rerank_response_decoder() -> decode.Decoder(List(RerankResult)) {
   decode.success(data)
 }
 
+/// Clamp a document for a rerank batch. Voyage caps a rerank request at
+/// 600k tokens total; 200 full-length issue bodies can exceed that, which
+/// 400s the whole call and silently degrades ranking to cosine order via
+/// the fallback paths. 4000 chars ≈ 1k tokens keeps a top-200 batch near
+/// 200k tokens — comfortably under, while preserving far more text than
+/// the model meaningfully uses for relevance.
+pub fn clamp_rerank_doc(text: String) -> String {
+  string.slice(text, 0, 4000)
+}
+
 pub fn rerank(
   query: String,
   documents: List(String),
