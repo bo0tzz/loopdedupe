@@ -17,6 +17,13 @@ pub fn sql_into_state(sql: sql.ItemState) -> types.ItemState {
   }
 }
 
+pub fn sql_into_item_type(sql: sql.ItemType) -> types.ItemType {
+  case sql {
+    sql.Issue -> types.Issue
+    sql.Discussion -> types.Discussion
+  }
+}
+
 fn state_into_sql(state: types.ItemState) -> sql.ItemState {
   case state {
     types.Open -> sql.Open
@@ -178,8 +185,10 @@ fn read_from_cache(db: pog.Connection, item_id: Int) {
       let items =
         list.map(rows, fn(row) {
           let sql.GetRerankCacheRow(
-            target_item_id:,
+            target_item_id: _,
             relevance_score:,
+            number:,
+            item_type:,
             title:,
             state:,
             state_reason:,
@@ -187,7 +196,8 @@ fn read_from_cache(db: pog.Connection, item_id: Int) {
           types.SuggestedDuplicate(
             similarity: relevance_score,
             title:,
-            github_id: target_item_id,
+            number:,
+            item_type: sql_into_item_type(item_type),
             state: sql_into_state(state),
             state_reason: sql_into_state_reason(state_reason),
           )
@@ -199,7 +209,9 @@ fn read_from_cache(db: pog.Connection, item_id: Int) {
 }
 
 type Candidate {
-  Candidate(suggested: types.SuggestedDuplicate, body: String)
+  // github_id lives here (not in the public SuggestedDuplicate) so the
+  // rerank cache can key by it without leaking it to the JSON response.
+  Candidate(suggested: types.SuggestedDuplicate, body: String, github_id: Int)
 }
 
 fn compute_and_cache(db: pog.Connection, item_id: Int) {
@@ -213,8 +225,15 @@ fn compute_and_cache(db: pog.Connection, item_id: Int) {
       // Persist the full reranked list so subsequent drill-ins are instant.
       // Failures here aren't fatal — the user got their result, we just
       // didn't manage to cache it for next time.
-      list.each(reranked, fn(s) {
-        case sql.insert_rerank_score(db, item_id, s.github_id, s.similarity) {
+      list.each(reranked, fn(c) {
+        case
+          sql.insert_rerank_score(
+            db,
+            item_id,
+            c.github_id,
+            c.suggested.similarity,
+          )
+        {
           Ok(_) -> Nil
           Error(e) ->
             logging.log(
@@ -223,7 +242,8 @@ fn compute_and_cache(db: pog.Connection, item_id: Int) {
             )
         }
       })
-      Ok(types.SuggestedDuplicates(items: list.take(reranked, 10)))
+      let suggested = list.map(reranked, fn(c) { c.suggested })
+      Ok(types.SuggestedDuplicates(items: list.take(suggested, 10)))
     }
     Error(e) -> Error(e)
   }
@@ -233,6 +253,8 @@ fn suggest_row_to_candidate(row: sql.SuggestDuplicatesRow) -> Candidate {
   let sql.SuggestDuplicatesRow(
     target_item_id:,
     similarity:,
+    number:,
+    item_type:,
     title:,
     body:,
     state:,
@@ -242,11 +264,13 @@ fn suggest_row_to_candidate(row: sql.SuggestDuplicatesRow) -> Candidate {
     suggested: types.SuggestedDuplicate(
       similarity:,
       title:,
-      github_id: target_item_id,
+      number:,
+      item_type: sql_into_item_type(item_type),
       state: sql_into_state(state),
       state_reason: sql_into_state_reason(state_reason),
     ),
-    body: body,
+    body:,
+    github_id: target_item_id,
   )
 }
 
@@ -254,10 +278,10 @@ fn rerank_candidates(
   db: pog.Connection,
   item_id: Int,
   candidates: List(Candidate),
-) -> List(types.SuggestedDuplicate) {
+) -> List(Candidate) {
   case candidates {
     [] -> []
-    [single] -> [single.suggested]
+    [single] -> [single]
     _ -> {
       case sql.select_item(db, item_id) {
         Ok(pog.Returned(1, [source])) -> {
@@ -271,11 +295,11 @@ fn rerank_candidates(
                 logging.Warning,
                 "rerank fell back to cosine: " <> snag.line_print(e),
               )
-              list.map(candidates, fn(c) { c.suggested })
+              candidates
             }
           }
         }
-        _ -> list.map(candidates, fn(c) { c.suggested })
+        _ -> candidates
       }
     }
   }
@@ -297,26 +321,29 @@ fn build_text(title: String, body: String) -> String {
 fn apply_rerank(
   candidates: List(Candidate),
   scored: List(voyage.RerankResult),
-) -> List(types.SuggestedDuplicate) {
+) -> List(Candidate) {
   let indexed = list.index_map(candidates, fn(c, i) { #(i, c) })
-  let by_index = fn(i: Int) {
-    list.find_map(indexed, fn(p) {
-      case p.0 == i {
-        True -> {
-          // Replace the cosine score with the rerank score so the cache
-          // (and downstream callers) display rerank relevance.
-          let updated =
-            types.SuggestedDuplicate(..p.1.suggested, similarity: 0.0)
-          Ok(updated)
+  list.filter_map(scored, fn(r) {
+    case
+      list.find_map(indexed, fn(p) {
+        case p.0 == r.index {
+          True -> Ok(p.1)
+          False -> Error(Nil)
         }
-        False -> Error(Nil)
-      }
-    })
-  }
-  list.index_map(scored, fn(r, _) { r })
-  |> list.filter_map(fn(r) {
-    case by_index(r.index) {
-      Ok(s) -> Ok(types.SuggestedDuplicate(..s, similarity: r.score))
+      })
+    {
+      Ok(c) ->
+        // Replace the cosine score with the rerank score so downstream
+        // consumers (cache, UI, JSON) see rerank relevance.
+        Ok(
+          Candidate(
+            ..c,
+            suggested: types.SuggestedDuplicate(
+              ..c.suggested,
+              similarity: r.score,
+            ),
+          ),
+        )
       Error(_) -> Error(Nil)
     }
   })

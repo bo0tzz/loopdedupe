@@ -786,12 +786,17 @@ pub fn candidates_table(items: List(github.SuggestedDuplicate)) -> String {
       <> "<div class=\"candidates-head\">Candidate</div>"
       <> {
         list.map(items, fn(c) {
+          let kind_path = case c.item_type {
+            github.Issue -> "/issues/"
+            github.Discussion -> "/discussions/"
+          }
           "<div class=\"similarity\">"
           <> format_similarity(c.similarity)
           <> "</div><div class=\"candidate-title\"><a class=\""
           <> state_class_github(c.state, c.state_reason)
-          <> "\" href=\"/items/"
-          <> int.to_string(c.github_id)
+          <> "\" href=\""
+          <> kind_path
+          <> int.to_string(c.number)
           <> "\">"
           <> escape(c.title)
           <> "</a></div>"

@@ -32,6 +32,8 @@ canonical AS (
 resolved AS (
     SELECT c.canonical_id,
            ct.relevance_score,
+           canon.number,
+           canon.item_type,
            canon.title, canon.state, canon.state_reason
     FROM cached_targets ct
              JOIN canonical c ON c.orig_id = ct.target_item_id
@@ -47,12 +49,14 @@ resolved AS (
 ),
 deduped AS (
     SELECT DISTINCT ON (canonical_id)
-           canonical_id, relevance_score, title, state, state_reason
+           canonical_id, relevance_score, number, item_type, title, state, state_reason
     FROM resolved
     ORDER BY canonical_id, relevance_score DESC
 )
 SELECT canonical_id AS target_item_id,
        relevance_score,
+       number,
+       item_type,
        title,
        state,
        state_reason

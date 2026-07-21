@@ -135,7 +135,8 @@ fn to_suggested(
 ) -> github.SuggestedDuplicate {
   github.SuggestedDuplicate(
     similarity: score,
-    github_id: row.id,
+    number: row.number,
+    item_type: item.sql_into_item_type(row.item_type),
     title: row.title,
     state: item.sql_into_state(row.state),
     state_reason: item.sql_into_state_reason(row.state_reason),

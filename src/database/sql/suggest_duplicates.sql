@@ -40,6 +40,8 @@ canonical AS (
 resolved AS (
     SELECT c.canonical_id,
            ae.similarity,
+           canon.number,
+           canon.item_type,
            canon.title, canon.body, canon.state, canon.state_reason
     FROM all_edges ae
              JOIN canonical c ON c.orig_id = ae.orig_id
@@ -55,7 +57,7 @@ resolved AS (
 ),
 deduped AS (
     SELECT DISTINCT ON (canonical_id)
-           canonical_id, similarity, title, body, state, state_reason
+           canonical_id, similarity, number, item_type, title, body, state, state_reason
     FROM resolved
     ORDER BY canonical_id, similarity DESC
 )
@@ -67,6 +69,8 @@ deduped AS (
 -- grows.
 SELECT canonical_id AS target_item_id,
        similarity,
+       number,
+       item_type,
        title,
        body,
        state,

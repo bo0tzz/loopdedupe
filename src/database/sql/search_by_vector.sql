@@ -36,6 +36,8 @@ canonical AS (
 resolved AS (
     SELECT c.canonical_id AS id,
            ct.similarity   AS similarity,
+           canon.number,
+           canon.item_type,
            canon.title,
            canon.body,
            canon.state,
@@ -46,11 +48,11 @@ resolved AS (
     WHERE canon.state_reason IS DISTINCT FROM 'duplicate'
 ),
 deduped AS (
-    SELECT DISTINCT ON (id) id, similarity, title, body, state, state_reason
+    SELECT DISTINCT ON (id) id, similarity, number, item_type, title, body, state, state_reason
     FROM resolved
     ORDER BY id, similarity DESC
 )
-SELECT id, similarity, title, body, state, state_reason
+SELECT id, similarity, number, item_type, title, body, state, state_reason
 FROM deduped
 ORDER BY similarity DESC
 LIMIT 200;

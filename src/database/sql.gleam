@@ -731,6 +731,8 @@ pub type GetRerankCacheRow {
   GetRerankCacheRow(
     target_item_id: Int,
     relevance_score: Float,
+    number: Int,
+    item_type: ItemType,
     title: String,
     state: ItemState,
     state_reason: Option(ItemStateReason),
@@ -755,15 +757,19 @@ pub fn get_rerank_cache(
   let decoder = {
     use target_item_id <- decode.field(0, decode.int)
     use relevance_score <- decode.field(1, decode.float)
-    use title <- decode.field(2, decode.string)
-    use state <- decode.field(3, item_state_decoder())
+    use number <- decode.field(2, decode.int)
+    use item_type <- decode.field(3, item_type_decoder())
+    use title <- decode.field(4, decode.string)
+    use state <- decode.field(5, item_state_decoder())
     use state_reason <- decode.field(
-      4,
+      6,
       decode.optional(item_state_reason_decoder()),
     )
     decode.success(GetRerankCacheRow(
       target_item_id:,
       relevance_score:,
+      number:,
+      item_type:,
       title:,
       state:,
       state_reason:,
@@ -804,6 +810,8 @@ canonical AS (
 resolved AS (
     SELECT c.canonical_id,
            ct.relevance_score,
+           canon.number,
+           canon.item_type,
            canon.title, canon.state, canon.state_reason
     FROM cached_targets ct
              JOIN canonical c ON c.orig_id = ct.target_item_id
@@ -819,12 +827,14 @@ resolved AS (
 ),
 deduped AS (
     SELECT DISTINCT ON (canonical_id)
-           canonical_id, relevance_score, title, state, state_reason
+           canonical_id, relevance_score, number, item_type, title, state, state_reason
     FROM resolved
     ORDER BY canonical_id, relevance_score DESC
 )
 SELECT canonical_id AS target_item_id,
        relevance_score,
+       number,
+       item_type,
        title,
        state,
        state_reason
@@ -1262,6 +1272,8 @@ pub type SearchByVectorRow {
   SearchByVectorRow(
     id: Int,
     similarity: Float,
+    number: Int,
+    item_type: ItemType,
     title: String,
     body: String,
     state: ItemState,
@@ -1291,16 +1303,20 @@ pub fn search_by_vector(
   let decoder = {
     use id <- decode.field(0, decode.int)
     use similarity <- decode.field(1, decode.float)
-    use title <- decode.field(2, decode.string)
-    use body <- decode.field(3, decode.string)
-    use state <- decode.field(4, item_state_decoder())
+    use number <- decode.field(2, decode.int)
+    use item_type <- decode.field(3, item_type_decoder())
+    use title <- decode.field(4, decode.string)
+    use body <- decode.field(5, decode.string)
+    use state <- decode.field(6, item_state_decoder())
     use state_reason <- decode.field(
-      5,
+      7,
       decode.optional(item_state_reason_decoder()),
     )
     decode.success(SearchByVectorRow(
       id:,
       similarity:,
+      number:,
+      item_type:,
       title:,
       body:,
       state:,
@@ -1346,6 +1362,8 @@ canonical AS (
 resolved AS (
     SELECT c.canonical_id AS id,
            ct.similarity   AS similarity,
+           canon.number,
+           canon.item_type,
            canon.title,
            canon.body,
            canon.state,
@@ -1356,11 +1374,11 @@ resolved AS (
     WHERE canon.state_reason IS DISTINCT FROM 'duplicate'
 ),
 deduped AS (
-    SELECT DISTINCT ON (id) id, similarity, title, body, state, state_reason
+    SELECT DISTINCT ON (id) id, similarity, number, item_type, title, body, state, state_reason
     FROM resolved
     ORDER BY id, similarity DESC
 )
-SELECT id, similarity, title, body, state, state_reason
+SELECT id, similarity, number, item_type, title, body, state, state_reason
 FROM deduped
 ORDER BY similarity DESC
 LIMIT 200;
@@ -1560,6 +1578,8 @@ pub type SuggestDuplicatesRow {
   SuggestDuplicatesRow(
     target_item_id: Int,
     similarity: Float,
+    number: Int,
+    item_type: ItemType,
     title: String,
     body: String,
     state: ItemState,
@@ -1588,16 +1608,20 @@ pub fn suggest_duplicates(
   let decoder = {
     use target_item_id <- decode.field(0, decode.int)
     use similarity <- decode.field(1, decode.float)
-    use title <- decode.field(2, decode.string)
-    use body <- decode.field(3, decode.string)
-    use state <- decode.field(4, item_state_decoder())
+    use number <- decode.field(2, decode.int)
+    use item_type <- decode.field(3, item_type_decoder())
+    use title <- decode.field(4, decode.string)
+    use body <- decode.field(5, decode.string)
+    use state <- decode.field(6, item_state_decoder())
     use state_reason <- decode.field(
-      5,
+      7,
       decode.optional(item_state_reason_decoder()),
     )
     decode.success(SuggestDuplicatesRow(
       target_item_id:,
       similarity:,
+      number:,
+      item_type:,
       title:,
       body:,
       state:,
@@ -1647,6 +1671,8 @@ canonical AS (
 resolved AS (
     SELECT c.canonical_id,
            ae.similarity,
+           canon.number,
+           canon.item_type,
            canon.title, canon.body, canon.state, canon.state_reason
     FROM all_edges ae
              JOIN canonical c ON c.orig_id = ae.orig_id
@@ -1662,7 +1688,7 @@ resolved AS (
 ),
 deduped AS (
     SELECT DISTINCT ON (canonical_id)
-           canonical_id, similarity, title, body, state, state_reason
+           canonical_id, similarity, number, item_type, title, body, state, state_reason
     FROM resolved
     ORDER BY canonical_id, similarity DESC
 )
@@ -1674,6 +1700,8 @@ deduped AS (
 -- grows.
 SELECT canonical_id AS target_item_id,
        similarity,
+       number,
+       item_type,
        title,
        body,
        state,

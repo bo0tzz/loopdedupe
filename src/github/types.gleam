@@ -230,10 +230,23 @@ pub fn discussion_webhook_decoder() {
   decode.success(DiscussionWebhook(action:, item:, category_slug:))
 }
 
+pub type ItemType {
+  Issue
+  Discussion
+}
+
+fn item_type_to_json(t: ItemType) -> json.Json {
+  case t {
+    Issue -> json.string("issue")
+    Discussion -> json.string("discussion")
+  }
+}
+
 pub type SuggestedDuplicate {
   SuggestedDuplicate(
     similarity: Float,
-    github_id: Int,
+    number: Int,
+    item_type: ItemType,
     title: String,
     state: ItemState,
     state_reason: Option(ItemStateReason),
@@ -243,11 +256,18 @@ pub type SuggestedDuplicate {
 fn suggested_duplicate_to_json(
   suggested_duplicate: SuggestedDuplicate,
 ) -> json.Json {
-  let SuggestedDuplicate(similarity:, github_id:, title:, state:, state_reason:) =
-    suggested_duplicate
+  let SuggestedDuplicate(
+    similarity:,
+    number:,
+    item_type:,
+    title:,
+    state:,
+    state_reason:,
+  ) = suggested_duplicate
   json.object([
     #("similarity", json.float(similarity)),
-    #("github_id", json.int(github_id)),
+    #("number", json.int(number)),
+    #("item_type", item_type_to_json(item_type)),
     #("title", json.string(title)),
     #("state", item_state_to_json(state)),
     #("state_reason", json.nullable(state_reason, item_state_reason_to_json)),
