@@ -55,6 +55,7 @@ pub fn list_items(
                       createdAt
                   }
               }
+              duplicateOf { number }
               conversion: timelineItems(itemTypes: CONVERTED_TO_DISCUSSION_EVENT, last: 1) {
                   nodes {
                       ... on ConvertedToDiscussionEvent {
@@ -69,7 +70,7 @@ pub fn list_items(
                       }
                   }
               }
-              markedDup: timelineItems(itemTypes: MARKED_AS_DUPLICATE_EVENT, last: 1) {
+              markedDup: timelineItems(itemTypes: MARKED_AS_DUPLICATE_EVENT, last: 10) {
                   nodes {
                       ... on MarkedAsDuplicateEvent {
                           canonical {
@@ -133,19 +134,25 @@ fn list_items_response_decoder() -> decode.Decoder(ListItemsResponse) {
 
 fn backfill_item_decoder() -> decode.Decoder(BackfillItem) {
   use item <- decode.then(types.issue_decoder())
-  // Three independent signals for the canonical pointer, in precedence order:
+  // Four independent signals for the canonical pointer, in precedence order:
   //   1. ConvertedToDiscussionEvent — the issue was converted to a discussion,
   //      that discussion *is* the canonical entity going forward.
-  //   2. MarkedAsDuplicateEvent — maintainer used GitHub's "Mark as duplicate"
-  //      UI dropdown. Structured, has canonical.number directly. The 'lazy
-  //      close' path that doesn't leave a parseable comment.
-  //   3. Maintainer dupe-pattern comment near close time — the original
+  //   2. Issue.duplicateOf — GitHub's native duplicate relationship, and what
+  //      the "mark as duplicate" UI actually writes. Structured, directional,
+  //      and populated on closures that leave no comment at all (which is
+  //      most of them: it carries the canonical for 579 of the 939
+  //      duplicate-closed issues that no other signal reaches).
+  //   3. MarkedAsDuplicateEvent — the older event form of the same action.
+  //      Retained as a safety net, but see marked_as_duplicate_decoder: every
+  //      occurrence in this repo is a reverse-direction event, so in practice
+  //      it now yields nothing.
+  //   4. Maintainer dupe-pattern comment near close time — the original
   //      manual workflow, parsed heuristically.
-  // 1 and 2 are mutually exclusive in practice (you don't both convert and
-  // mark as duplicate). Comment-based ref is the fallback for older closures
-  // and for maintainers who left a comment without using the UI button.
+  // Structured signals beat the heuristic: where 2 and 4 disagreed, 4 was
+  // wrong both times.
   use converted_to <- decode.then(converted_to_discussion_decoder())
-  use marked_dup <- decode.then(marked_as_duplicate_decoder())
+  use duplicate_of_field <- decode.then(duplicate_of_field_decoder())
+  use marked_dup <- decode.then(marked_as_duplicate_decoder(item.number))
   use closed_at <- decode.optional_field(
     "closedAt",
     option.None,
@@ -154,17 +161,58 @@ fn backfill_item_decoder() -> decode.Decoder(BackfillItem) {
   use comment_ref <- decode.then(duplicate_of_decoder(closed_at))
   use author_login <- decode.then(author_login_decoder())
   use closed_by <- decode.then(closed_by_decoder())
-  let duplicate_of_number = case converted_to, marked_dup, comment_ref {
-    option.Some(_), _, _ -> converted_to
-    _, option.Some(_), _ -> marked_dup
-    _, _, _ -> comment_ref
-  }
+  let duplicate_of_number =
+    resolve_duplicate_of(item.number, [
+      converted_to,
+      duplicate_of_field,
+      marked_dup,
+      comment_ref,
+    ])
   decode.success(BackfillItem(
     item:,
     duplicate_of_number:,
     author_login:,
     closed_by:,
   ))
+}
+
+/// Pick the canonical pointer from the available signals, highest-precedence
+/// first, discarding any that points back at the item itself.
+///
+/// The self-reference guard is the important part. A pointer equal to the
+/// item's own number is never meaningful — it makes the item its own
+/// canonical, which the chain walk in suggest_duplicates.sql then spins on
+/// for its full ten levels before resolving back to the item. A garbage
+/// signal falls through to the next one rather than vetoing it, so a bad
+/// structured read can't mask a good comment ref.
+@internal
+pub fn resolve_duplicate_of(
+  self_number: Int,
+  signals: List(Option(Int)),
+) -> Option(Int) {
+  signals
+  |> list.find_map(fn(signal) {
+    case signal {
+      option.Some(n) if n != self_number -> Ok(n)
+      _ -> Error(Nil)
+    }
+  })
+  |> option.from_result
+}
+
+// Issue.duplicateOf — GitHub's native duplicate relationship. This is where
+// the "mark as duplicate" UI records the canonical, and unlike
+// MarkedAsDuplicateEvent it is a field on the issue rather than a timeline
+// entry, so it is inherently directional: it always points away from this
+// issue and can never resolve to itself. Discussions have no equivalent
+// field, which is why the discussion path still depends on comments.
+fn duplicate_of_field_decoder() -> decode.Decoder(Option(Int)) {
+  use number <- decode.optional_field(
+    "duplicateOf",
+    option.None,
+    decode.optional(decode.at(["number"], decode.int)),
+  )
+  decode.success(number)
 }
 
 // GitHub's GraphQL author field is null for ghost (deleted) accounts. Use
@@ -204,9 +252,19 @@ fn converted_to_discussion_decoder() -> decode.Decoder(Option(Int)) {
 
 // MarkedAsDuplicateEvent.canonical — the canonical Issue (or PR) the
 // maintainer pointed this item to via GitHub's UI dropdown. We only accept
-// Issue canonicals because PRs aren't in our items table. Returns None when
-// the field isn't an Issue, or when no such event fired.
-fn marked_as_duplicate_decoder() -> decode.Decoder(Option(Int)) {
+// Issue canonicals because PRs aren't in our items table.
+//
+// GitHub records this event on BOTH timelines: the duplicate's and the
+// canonical's. On the canonical's timeline the event describes some *other*
+// issue being marked against it, and `canonical` is this very issue — so
+// reading it unfiltered makes an item its own canonical. That is where the
+// self-referential rows in `items` came from, and taking only `last: 1` made
+// it worse by preferring whichever event happened most recently. We now scan
+// the recent events and keep the first that points somewhere else, which
+// leaves genuine forward events working and drops the reverse ones.
+fn marked_as_duplicate_decoder(
+  self_number: Int,
+) -> decode.Decoder(Option(Int)) {
   let event_decoder = {
     use number <- decode.optional_field(
       "canonical",
@@ -217,10 +275,7 @@ fn marked_as_duplicate_decoder() -> decode.Decoder(Option(Int)) {
   }
   let nodes_decoder = {
     use nodes <- decode.field("nodes", decode.list(event_decoder))
-    case nodes {
-      [first, ..] -> decode.success(first)
-      [] -> decode.success(option.None)
-    }
+    decode.success(resolve_duplicate_of(self_number, nodes))
   }
   use timeline <- decode.optional_field(
     "markedDup",
@@ -515,7 +570,12 @@ fn discussion_backfill_decoder() -> decode.Decoder(BackfillItem) {
     option.None,
     decode.optional(timestamp_decoder()),
   )
-  use duplicate_of_number <- decode.then(duplicate_of_decoder(closed_at))
+  // Discussions have neither timelineItems nor a duplicateOf field, so the
+  // maintainer comment is the only signal available here. Still guarded
+  // against self-reference: a comment that names its own thread's number is
+  // as useless as a reverse-direction event.
+  use comment_ref <- decode.then(duplicate_of_decoder(closed_at))
+  let duplicate_of_number = resolve_duplicate_of(item.number, [comment_ref])
   use author_login <- decode.then(author_login_decoder())
   // Discussions have no timelineItems on the GitHub GraphQL API, so we
   // recover the closer from the bot's own closure comment instead. The
