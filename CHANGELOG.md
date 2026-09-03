@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.0.12](https://github.com/bo0tzz/loopdedupe/compare/v0.0.11...v0.0.12) (2026-09-03)
+
+
+### Features
+
+* **bot:** reply with similar items on [@loopdedupe](https://github.com/loopdedupe) mention ([adb6f65](https://github.com/bo0tzz/loopdedupe/commit/adb6f65cbb32cca0b30a67bdc153bc773a88525f))
+* **dashboard:** show type and status on candidates, with a status filter ([53c12a0](https://github.com/bo0tzz/loopdedupe/commit/53c12a0fae333b12fa7d1e805962db7602a3aec3)), closes [#24](https://github.com/bo0tzz/loopdedupe/issues/24)
+
+
+### Bug Fixes
+
+* **bot:** link suggestions via redirect.github.com ([084fbdb](https://github.com/bo0tzz/loopdedupe/commit/084fbdb3823f5992ce0e62f2233ed06c08f3b2ce))
+* **github:** read the canonical from Issue.duplicateOf ([38b9f75](https://github.com/bo0tzz/loopdedupe/commit/38b9f75707a52e3e511fd4537edb58d711a6903d))
+* **rerank:** clamp per-doc length to stay under voyage's batch cap ([f57bd6f](https://github.com/bo0tzz/loopdedupe/commit/f57bd6f3847a2e320c3d20d6bc8bf312acd61646))
+
 ## [0.0.11](https://github.com/bo0tzz/loopdedupe/compare/v0.0.10...v0.0.11) (2026-07-21)
 
 
