@@ -1,5 +1,6 @@
 import gleam/dynamic/decode
 import gleam/json
+import gleam/list
 import gleam/option.{type Option}
 import gleam/string
 import gleam/time/duration
@@ -364,6 +365,71 @@ fn suggested_duplicate_to_json(
     #("state", item_state_to_json(state)),
     #("state_reason", json.nullable(state_reason, item_state_reason_to_json)),
   ])
+}
+
+/// Stable slug for an item's status. Doubles as the filter key in query
+/// strings and the CSS modifier on the status chip.
+///
+/// Open items collapse to "open" whatever their reason — a reopened item is
+/// just open — while closed items keep the reason that closed them. That
+/// last part is the distinction the dashboard's state_class helpers throw
+/// away by mapping every closed reason onto one class, which is why a
+/// not-planned close was indistinguishable from a completed one on screen.
+pub fn status_slug(
+  state: ItemState,
+  reason: Option(ItemStateReason),
+) -> String {
+  case state, reason {
+    Open, _ -> "open"
+    Closed, option.Some(Completed) -> "completed"
+    Closed, option.Some(NotPlanned) -> "not_planned"
+    Closed, option.Some(Duplicate) -> "duplicate"
+    Closed, option.Some(Outdated) -> "outdated"
+    Closed, option.Some(Resolved) -> "resolved"
+    // A closed item whose reason is Reopened is contradictory; GitHub only
+    // sets Reopened alongside an open state. Treat it as a plain close.
+    Closed, option.Some(Reopened) -> "closed"
+    Closed, option.None -> "closed"
+  }
+}
+
+pub fn status_label(slug: String) -> String {
+  case slug {
+    "open" -> "open"
+    "completed" -> "closed"
+    "not_planned" -> "not planned"
+    "duplicate" -> "duplicate"
+    "outdated" -> "outdated"
+    "resolved" -> "resolved"
+    _ -> "closed"
+  }
+}
+
+/// Statuses offered as filter toggles, in display order. `duplicate` is
+/// deliberately absent: candidate queries resolve duplicates to their
+/// canonical and drop dead ends, so a duplicate never reaches a candidate
+/// list for there to be anything to hide.
+pub const filterable_statuses = [
+  "open", "completed", "not_planned", "resolved", "outdated",
+]
+
+/// Drop candidates whose status the caller asked to hide. Callers apply this
+/// before capping the list, so hiding a status yields a full page of what's
+/// left rather than a short one.
+pub fn reject_hidden_statuses(
+  items: List(SuggestedDuplicate),
+  hidden: List(String),
+) -> List(SuggestedDuplicate) {
+  case hidden {
+    [] -> items
+    _ ->
+      list.filter(items, fn(candidate) {
+        !list.contains(
+          hidden,
+          status_slug(candidate.state, candidate.state_reason),
+        )
+      })
+  }
 }
 
 pub type SuggestedDuplicates {

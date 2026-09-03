@@ -391,14 +391,34 @@ pub fn redirect_by_number(
   }
 }
 
-pub fn item_detail(ctx: Context, id: String) -> Response {
+pub fn item_detail(req: Request, ctx: Context, id: String) -> Response {
   case int.parse(id) {
     Error(_) -> wisp.bad_request("invalid id")
     Ok(item_id) -> {
       case item.select(ctx.db, item_id) {
         Error(_) -> wisp.not_found()
         Ok(it) -> {
-          let candidates = case item.suggest_duplicates(ctx.db, item_id) {
+          // Absent `show` params means an un-filtered visit, not "hide
+          // everything" — only treat the filter as submitted once at least
+          // one appears in the query string.
+          let shown =
+            wisp.get_query(req)
+            |> list.filter_map(fn(pair) {
+              case pair.0 {
+                "show" -> Ok(pair.1)
+                _ -> Error(Nil)
+              }
+            })
+          let submitted = case
+            list.any(wisp.get_query(req), fn(p) { p.0 == "filtered" })
+          {
+            True -> option.Some(shown)
+            False -> option.None
+          }
+          let hidden = hidden_from_shown(submitted)
+          let candidates = case
+            item.suggest_duplicates(ctx.db, item_id, hidden)
+          {
             Ok(github.SuggestedDuplicates(items)) -> items
             Error(_) -> []
           }
@@ -406,6 +426,10 @@ pub fn item_detail(ctx: Context, id: String) -> Response {
             page("#" <> int.to_string(it.number) <> " · " <> it.title, [
               item_header(it),
               "<h2>Similar candidates</h2>",
+              "<form method=\"get\" class=\"filter-form\">"
+                <> "<input type=\"hidden\" name=\"filtered\" value=\"1\">"
+                <> status_filter_controls(hidden)
+                <> "<button type=\"submit\">apply</button></form>",
               candidates_table(candidates),
               item_body(it),
             ])
@@ -499,8 +523,29 @@ fn style_block() -> String {
     header-link a:hover { opacity: 1; }
     .state-closed { opacity: 0.55; }
     .state-duplicate { text-decoration: line-through; opacity: 0.55; }
+    /* Status chip. Shares the .kind chip's shape; colour carries the
+       distinction the link opacity alone couldn't make. */
+    .status { display: inline-block; font-size: 0.7em; padding: 0.1em 0.4em; border-radius: 3px; vertical-align: middle; margin-right: 0.3em; background: #ddd; color: #333; }
+    .status-open { background: #d6f0d8; color: #1b5e20; }
+    .status-completed { background: #d9d9f0; color: #2a2a6b; }
+    .status-not_planned { background: #f0dcd6; color: #7a3018; }
+    .status-resolved { background: #d6ecf0; color: #14505c; }
+    .status-outdated { background: #ece0c8; color: #5c4413; }
+    .status-duplicate { background: #e6d6f0; color: #4a1d63; }
+    .status-filter { border: 1px solid #ddd; border-radius: 4px; padding: 0.4em 0.7em 0.55em; margin: 0.6em 0; display: flex; flex-wrap: wrap; gap: 0 0.9em; align-items: center; }
+    .status-filter legend { font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; padding: 0 0.3em; }
+    .status-filter label { font-size: 0.85em; display: inline-flex; align-items: center; gap: 0.25em; }
+    .filter-form { margin: 0.6em 0 1em; }
     .item-body { white-space: pre-wrap; background: #f6f6f6; padding: 1em; border-radius: 6px; }
-    @media (prefers-color-scheme: dark) { .item-body, .kind { background: #222; color: #eee; } .kind-discussion { background: #2e5b35; } }
+    @media (prefers-color-scheme: dark) { .item-body, .kind { background: #222; color: #eee; } .kind-discussion { background: #2e5b35; }
+      .status { background: #2a2a2a; color: #ddd; }
+      .status-open { background: #1e4022; color: #cfe9d2; }
+      .status-completed { background: #2b2b4d; color: #d5d5f0; }
+      .status-not_planned { background: #4d2e1e; color: #f0d9cc; }
+      .status-resolved { background: #1c3f47; color: #cfe6ec; }
+      .status-outdated { background: #45381c; color: #ece0c8; }
+      .status-duplicate { background: #3a2547; color: #e6d6f0; }
+      .status-filter { border-color: #333; } }
     a { color: #06c; }
     .backfill-triggers { display: flex; flex-wrap: wrap; gap: 0.6em; align-items: center; margin: 1em 0 2em; }
     .backfill-triggers .trigger { padding: 0.5em 0.9em; font-size: 0.95em; border: 1px solid #888; background: transparent; color: inherit; border-radius: 4px; cursor: pointer; }
@@ -792,12 +837,17 @@ pub fn candidates_table(items: List(github.SuggestedDuplicate)) -> String {
           }
           "<div class=\"similarity\">"
           <> format_similarity(c.similarity)
-          <> "</div><div class=\"candidate-title\"><a class=\""
+          <> "</div><div class=\"candidate-title\">"
+          <> kind_badge_github(c.item_type)
+          <> status_badge(c.state, c.state_reason)
+          <> "<a class=\""
           <> state_class_github(c.state, c.state_reason)
           <> "\" href=\""
           <> kind_path
           <> int.to_string(c.number)
-          <> "\">"
+          <> "\">#"
+          <> int.to_string(c.number)
+          <> " "
           <> escape(c.title)
           <> "</a></div>"
         })
@@ -839,6 +889,74 @@ fn kind_badge(t: sql.ItemType) -> String {
   case t {
     sql.Issue -> "<span class=\"kind\">issue</span>"
     sql.Discussion -> "<span class=\"kind kind-discussion\">discussion</span>"
+  }
+}
+
+// Same chip as kind_badge, for the github-typed candidates. The two type
+// families mirror each other the way state_class / state_class_github do:
+// recent items come from squirrel row types, candidates from the API types.
+fn kind_badge_github(t: github.ItemType) -> String {
+  case t {
+    github.Issue -> "<span class=\"kind\">issue</span>"
+    github.Discussion ->
+      "<span class=\"kind kind-discussion\">discussion</span>"
+  }
+}
+
+// Visible status chip. state_class_github still styles the link itself, but
+// it can only say "closed-ish"; this spells out which flavour of closed, so
+// a not-planned rejection reads differently from completed work.
+fn status_badge(
+  state: github.ItemState,
+  reason: Option(github.ItemStateReason),
+) -> String {
+  let slug = github.status_slug(state, reason)
+  "<span class=\"status status-"
+  <> slug
+  <> "\">"
+  <> escape(github.status_label(slug))
+  <> "</span>"
+}
+
+/// Status filter checkboxes. Rendered checked when the status is *shown*, so
+/// the control reads as "show these" while the wire format lists what to
+/// hide — unchecking a box is the "don't display status X" the request asked
+/// for, and an untouched form sends nothing and changes nothing.
+pub fn status_filter_controls(hidden: List(String)) -> String {
+  "<fieldset class=\"status-filter\"><legend>show</legend>"
+  <> {
+    github.filterable_statuses
+    |> list.map(fn(slug) {
+      let checked = case list.contains(hidden, slug) {
+        True -> ""
+        False -> " checked"
+      }
+      "<label><input type=\"checkbox\" name=\"show\" value=\""
+      <> slug
+      <> "\""
+      <> checked
+      <> "> "
+      <> escape(github.status_label(slug))
+      <> "</label>"
+    })
+    |> string.concat()
+  }
+  <> "</fieldset>"
+}
+
+/// Invert the checked "show" boxes into the hidden set the queries take.
+///
+/// A form that submits no `show` values at all is the browser's way of
+/// saying every box was unchecked, which we honour. The distinction matters
+/// only once a form has been submitted; callers pass None for a first,
+/// unsubmitted render so the default stays "show everything".
+pub fn hidden_from_shown(shown: Option(List(String))) -> List(String) {
+  case shown {
+    option.None -> []
+    option.Some(values) ->
+      list.filter(github.filterable_statuses, fn(slug) {
+        !list.contains(values, slug)
+      })
   }
 }
 

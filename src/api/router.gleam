@@ -47,7 +47,7 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
     Get, ["backfills", "status"] -> dashboard.backfills_status_fragment(ctx)
     Get, [] -> dashboard.index(ctx)
     Get, ["dashboard", "stats"] -> dashboard.stats_fragment(ctx)
-    Get, ["items", id] -> dashboard.item_detail(ctx, id)
+    Get, ["items", id] -> dashboard.item_detail(req, ctx, id)
     Get, ["issues", n] -> dashboard.redirect_by_number(ctx, sql.Issue, n)
     Get, ["discussions", n] ->
       dashboard.redirect_by_number(ctx, sql.Discussion, n)

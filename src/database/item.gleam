@@ -156,7 +156,15 @@ pub fn select(
   |> map_item()
 }
 
-pub fn suggest_duplicates(db: pog.Connection, item_id: Int) {
+/// `hidden` is a list of status slugs (see types.status_slug) to drop from
+/// the results. Pass [] for the unfiltered list. Filtering is applied after
+/// chain resolution but before the ten-row cap, so hiding a status returns a
+/// full page of what remains rather than a stub.
+pub fn suggest_duplicates(
+  db: pog.Connection,
+  item_id: Int,
+  hidden: List(String),
+) {
   // Two-stage retrieval with lazy cache:
   //   1. If item_rerank_cache has rows for this source, serve from there.
   //   2. Otherwise: pull the top-50 cosine candidates (threshold 0.75 —
@@ -172,14 +180,14 @@ pub fn suggest_duplicates(db: pog.Connection, item_id: Int) {
   case sql.has_rerank_cache(db, item_id) {
     Ok(pog.Returned(_, [row])) ->
       case row.cached {
-        True -> read_from_cache(db, item_id)
-        False -> compute_and_cache(db, item_id)
+        True -> read_from_cache(db, item_id, hidden)
+        False -> compute_and_cache(db, item_id, hidden)
       }
-    _ -> compute_and_cache(db, item_id)
+    _ -> compute_and_cache(db, item_id, hidden)
   }
 }
 
-fn read_from_cache(db: pog.Connection, item_id: Int) {
+fn read_from_cache(db: pog.Connection, item_id: Int, hidden: List(String)) {
   case sql.get_rerank_cache(db, item_id) {
     Ok(pog.Returned(_, rows)) -> {
       let items =
@@ -202,6 +210,8 @@ fn read_from_cache(db: pog.Connection, item_id: Int) {
             state_reason: sql_into_state_reason(state_reason),
           )
         })
+        |> types.reject_hidden_statuses(hidden)
+        |> list.take(10)
       Ok(types.SuggestedDuplicates(items:))
     }
     Error(e) -> Error(e)
@@ -214,7 +224,7 @@ type Candidate {
   Candidate(suggested: types.SuggestedDuplicate, body: String, github_id: Int)
 }
 
-fn compute_and_cache(db: pog.Connection, item_id: Int) {
+fn compute_and_cache(db: pog.Connection, item_id: Int, hidden: List(String)) {
   // Threshold 0.65 for voyage-4-large + input_type=document. Noise p95 is
   // 0.68 so 0.65 sits just below — caught dupes get reranked, the
   // borderline noise gets filtered out by the rerank's heavier model.
@@ -242,7 +252,11 @@ fn compute_and_cache(db: pog.Connection, item_id: Int) {
             )
         }
       })
-      let suggested = list.map(reranked, fn(c) { c.suggested })
+      // Cache the full reranked list before filtering — the cache is shared
+      // across every filter combination, so it must hold everything.
+      let suggested =
+        list.map(reranked, fn(c) { c.suggested })
+        |> types.reject_hidden_statuses(hidden)
       Ok(types.SuggestedDuplicates(items: list.take(suggested, 10)))
     }
     Error(e) -> Error(e)

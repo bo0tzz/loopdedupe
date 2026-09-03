@@ -53,6 +53,10 @@ deduped AS (
     FROM resolved
     ORDER BY canonical_id, relevance_score DESC
 )
+-- Over-fetch relative to the ten the drill-in renders. Status filtering
+-- happens in Gleam after chain resolution, so pulling only ten here would
+-- mean hiding a status could leave two rows on screen; fifty gives the
+-- filter room to still fill a page.
 SELECT canonical_id AS target_item_id,
        relevance_score,
        number,
@@ -62,4 +66,4 @@ SELECT canonical_id AS target_item_id,
        state_reason
 FROM deduped
 ORDER BY relevance_score DESC
-LIMIT 10;
+LIMIT 50;

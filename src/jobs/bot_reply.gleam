@@ -135,7 +135,9 @@ pub fn handle(ctx: Context, job: BotReplyJob) -> Result(String, BotReplyError) {
     True -> Ok("already replied")
     False -> {
       use hits <- result.try(
-        search.do_search(ctx, job.title <> "\n\n" <> job.body)
+        // No status filter: a closed canonical is still the right answer to
+        // point a duplicate at, and the reply renders each hit's status.
+        search.do_search(ctx, job.title <> "\n\n" <> job.body, [])
         |> result.map_error(BotReplyError),
       )
       let hits =

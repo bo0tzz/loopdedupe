@@ -28,7 +28,9 @@ pub fn get(ctx: Context, id: String) -> Response {
 
 pub fn get_similar(ctx: Context, id: String) -> Response {
   let assert Ok(item_id) = int.parse(id)
-  case item.suggest_duplicates(ctx.db, item_id) {
+  // No status filter on the JSON API — callers get everything and filter
+  // client-side on the state/state_reason fields already in the payload.
+  case item.suggest_duplicates(ctx.db, item_id, []) {
     Ok(sugg) ->
       github.suggested_duplicates_to_json(sugg)
       |> json.to_string()
