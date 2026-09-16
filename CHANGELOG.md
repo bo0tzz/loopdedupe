@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.13](https://github.com/bo0tzz/loopdedupe/compare/v0.0.12...v0.0.13) (2026-09-16)
+
+
+### Features
+
+* **health:** database-backed /healthz for kubernetes probes ([2a1b20a](https://github.com/bo0tzz/loopdedupe/commit/2a1b20aef93afa98fb88893f34c37b68255e18a4))
+
 ## [0.0.12](https://github.com/bo0tzz/loopdedupe/compare/v0.0.11...v0.0.12) (2026-09-03)
 
 
