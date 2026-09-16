@@ -1,4 +1,5 @@
 import api/dashboard
+import api/health
 import api/items
 import api/search
 import api/webhook
@@ -29,8 +30,18 @@ pub fn supervised(ctx: Context) {
 }
 
 pub fn handle_request(req: Request, ctx: Context) -> Response {
-  use <- wisp.log_request(req)
+  case req.method, wisp.path_segments(req) {
+    // Kept outside log_request: probes fire every few seconds, and the
+    // incident postmortem was assembled from log dumps that this would bury.
+    Get, ["healthz"] -> health.check(ctx)
+    _, _ -> {
+      use <- wisp.log_request(req)
+      route(req, ctx)
+    }
+  }
+}
 
+fn route(req: Request, ctx: Context) -> Response {
   case req.method, wisp.path_segments(req) {
     Post, ["api", "webhooks", "github"] -> webhook.handle(req, ctx)
     Get, ["api", "items"] -> items.list(ctx)
