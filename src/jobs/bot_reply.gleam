@@ -11,6 +11,7 @@ import api/search
 import github/auth
 import github/comments
 import github/types as github
+import gleam/bool
 import gleam/dynamic/decode
 import gleam/float
 import gleam/int
@@ -134,11 +135,17 @@ pub fn handle(ctx: Context, job: BotReplyJob) -> Result(String, BotReplyError) {
   case comments.already_replied(existing, job.comment_id) {
     True -> Ok("already replied")
     False -> {
-      use hits <- result.try(
+      use #(hits, scoring) <- result.try(
         // No status filter: a closed canonical is still the right answer to
         // point a duplicate at, and the reply renders each hit's status.
         search.do_search(ctx, job.title <> "\n\n" <> job.body, [])
         |> result.map_error(BotReplyError),
+      )
+      // score_floor only means something for rerank scores. Fail and let m25
+      // retry rather than post a reply that every cosine candidate clears.
+      use <- bool.guard(
+        scoring == search.CosineFallback,
+        Error(BotReplyError("rerank unavailable, not posting cosine hits")),
       )
       let hits =
         hits

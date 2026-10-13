@@ -1,6 +1,7 @@
 import config
 import gleam/bool
 import gleam/dynamic/decode
+import gleam/float
 import gleam/http
 import gleam/http/request
 import gleam/http/response
@@ -149,8 +150,8 @@ fn rerank_request_body(query: String, documents: List(String)) -> String {
     #("query", json.string(query)),
     #("documents", json.array(documents, json.string)),
     #("model", json.string("rerank-2.5")),
-    // Voyage truncates per-doc when the request exceeds context — we'd
-    // rather have a slightly truncated rerank than a 400.
+    // Only covers the per-pair context limits (8k query, 32k query+doc).
+    // The per-request token cap is on us; see rerank_batches.
     #("truncation", json.bool(True)),
   ])
   |> json.to_string()
@@ -166,17 +167,73 @@ fn rerank_response_decoder() -> decode.Decoder(List(RerankResult)) {
   decode.success(data)
 }
 
-/// Clamp a document for a rerank batch. Voyage caps a rerank request at
-/// 600k tokens total; 200 full-length issue bodies can exceed that, which
-/// 400s the whole call and silently degrades ranking to cosine order via
-/// the fallback paths. 4000 chars ≈ 1k tokens keeps a top-200 batch near
-/// 200k tokens — comfortably under, while preserving far more text than
-/// the model meaningfully uses for relevance.
-pub fn clamp_rerank_doc(text: String) -> String {
+// Voyage counts a rerank request as query_tokens × documents +
+// Σ document_tokens and 400s the whole call past 600k. We have no
+// tokenizer, so cost is estimated at 2 bytes/token: this corpus measures
+// ~2.9 chars/token (markdown templates, pasted logs), and multibyte scripts
+// spend more bytes per token than ASCII does, so the estimate errs high.
+const rerank_batch_byte_budget = 1_000_000
+
+/// The query is clamped too, not just documents: it's billed once per
+/// document, so an unclamped 10k-char issue body against 200 candidates
+/// alone blows the cap. One cut for both sides also means an item reads the
+/// same to the model whether it's the query or a candidate.
+fn clamp_rerank_text(text: String) -> String {
   string.slice(text, 0, 4000)
 }
 
+/// Rescores documents against the query, best first. Indices refer to
+/// positions in `documents`.
 pub fn rerank(
+  query: String,
+  documents: List(String),
+) -> Result(List(RerankResult), snag.Snag) {
+  let query = clamp_rerank_text(query)
+  let documents = list.map(documents, clamp_rerank_text)
+  // Each (query, document) pair is scored independently, so splitting a
+  // call into batches doesn't change the scores, only the request count.
+  use scored <- result.map(
+    rerank_batches(query, documents, rerank_batch_byte_budget)
+    |> list.try_map(fn(batch) {
+      let #(offset, batch_documents) = batch
+      use scored <- result.map(rerank_request(query, batch_documents))
+      list.map(scored, fn(r) { RerankResult(..r, index: r.index + offset) })
+    }),
+  )
+  list.flatten(scored)
+  |> list.sort(fn(a, b) { float.compare(b.score, a.score) })
+}
+
+/// Splits documents into batches whose estimated cost stays within
+/// `byte_budget`, each tagged with the index of its first document. A
+/// document that alone exceeds the budget still gets a batch of its own.
+pub fn rerank_batches(
+  query: String,
+  documents: List(String),
+  byte_budget: Int,
+) -> List(#(Int, List(String))) {
+  let query_bytes = string.byte_size(query)
+  let #(batches, current, start, _) =
+    list.index_fold(documents, #([], [], 0, 0), fn(acc, document, i) {
+      let #(batches, current, start, used) = acc
+      let cost = query_bytes + string.byte_size(document)
+      case current {
+        [_, ..] if used + cost > byte_budget -> #(
+          [#(start, list.reverse(current)), ..batches],
+          [document],
+          i,
+          cost,
+        )
+        _ -> #(batches, [document, ..current], start, used + cost)
+      }
+    })
+  case current {
+    [] -> list.reverse(batches)
+    _ -> list.reverse([#(start, list.reverse(current)), ..batches])
+  }
+}
+
+fn rerank_request(
   query: String,
   documents: List(String),
 ) -> Result(List(RerankResult), snag.Snag) {

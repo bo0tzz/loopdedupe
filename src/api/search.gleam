@@ -45,7 +45,7 @@ pub fn handle_api(req: Request, ctx: Context) -> Response {
       // JSON callers get the unfiltered list; state and state_reason are
       // already in the payload for them to filter on.
       case do_search(ctx, query_text, []) {
-        Ok(hits) ->
+        Ok(#(hits, _)) ->
           github.suggested_duplicates_to_json(github.SuggestedDuplicates(
             items: hits,
           ))
@@ -81,7 +81,8 @@ pub fn handle_ui(req: Request, ctx: Context) -> Response {
       case list.key_find(body.values, "q") {
         Ok(q) if q != "" ->
           case do_search(ctx, q, hidden) {
-            Ok(hits) -> render(option.Some(q), option.Some(Ok(hits)), hidden)
+            Ok(#(hits, _)) ->
+              render(option.Some(q), option.Some(Ok(hits)), hidden)
             Error(e) -> render(option.Some(q), option.Some(Error(e)), hidden)
           }
         _ -> render(option.None, option.None, hidden)
@@ -93,6 +94,14 @@ pub fn handle_ui(req: Request, ctx: Context) -> Response {
 
 // --- Core pipeline ----------------------------------------------------------
 
+/// Whether hit scores are rerank relevance or the cosine fallback. The two
+/// aren't on the same scale: cosine noise sits around 0.68, so a threshold
+/// tuned for rerank scores lets nearly every cosine candidate through.
+pub type Scoring {
+  Reranked
+  CosineFallback
+}
+
 /// `hidden` lists status slugs to drop (see types.status_slug); [] keeps
 /// everything. Applied after rerank but before the ten-row cap, so a
 /// filtered search still returns ten results where ten exist rather than
@@ -101,7 +110,7 @@ pub fn do_search(
   ctx: Context,
   query_text: String,
   hidden: List(String),
-) -> Result(List(github.SuggestedDuplicate), String) {
+) -> Result(#(List(github.SuggestedDuplicate), Scoring), String) {
   use #(embedding, _) <- result.try(
     voyage.embed(query_text, model: voyage.Voyage4Large)
     |> result.map_error(fn(e) { "embed: " <> snag.line_print(e) }),
@@ -111,47 +120,48 @@ pub fn do_search(
     |> result.map_error(fn(e) { "cosine: " <> string.inspect(e) }),
   )
   case rows {
-    [] -> Ok([])
+    [] -> Ok(#([], Reranked))
     _ -> Ok(rerank_and_take(query_text, rows, 10, hidden))
   }
 }
 
 /// Rerank the chain-resolved cosine candidates against the query text.
-/// Falls back to cosine ordering if the rerank API call fails so the
-/// caller still gets a useful response.
+/// Falls back to cosine ordering, tagged CosineFallback, if the rerank API
+/// call fails so the caller still gets a useful response.
 fn rerank_and_take(
   query_text: String,
   cosine: List(sql.SearchByVectorRow),
   take: Int,
   hidden: List(String),
-) -> List(github.SuggestedDuplicate) {
-  let docs =
-    list.map(cosine, fn(r) {
-      voyage.clamp_rerank_doc(r.title <> "\n\n" <> r.body)
-    })
+) -> #(List(github.SuggestedDuplicate), Scoring) {
+  let docs = list.map(cosine, fn(r) { r.title <> "\n\n" <> r.body })
   case voyage.rerank(query_text, docs) {
     Ok(scored) -> {
       let indexed = list.index_map(cosine, fn(row, i) { #(i, row) })
-      scored
-      |> list.filter_map(fn(s) {
-        case list.key_find(indexed, s.index) {
-          Ok(row) -> Ok(to_suggested(row, s.score))
-          Error(_) -> Error(Nil)
-        }
-      })
-      |> list.sort(fn(a, b) { float.compare(b.similarity, a.similarity) })
-      |> github.reject_hidden_statuses(hidden)
-      |> list.take(take)
+      let hits =
+        scored
+        |> list.filter_map(fn(s) {
+          case list.key_find(indexed, s.index) {
+            Ok(row) -> Ok(to_suggested(row, s.score))
+            Error(_) -> Error(Nil)
+          }
+        })
+        |> list.sort(fn(a, b) { float.compare(b.similarity, a.similarity) })
+        |> github.reject_hidden_statuses(hidden)
+        |> list.take(take)
+      #(hits, Reranked)
     }
     Error(e) -> {
       logging.log(
         logging.Warning,
         "search rerank fell back to cosine: " <> snag.line_print(e),
       )
-      cosine
-      |> list.map(fn(row) { to_suggested(row, row.similarity) })
-      |> github.reject_hidden_statuses(hidden)
-      |> list.take(take)
+      let hits =
+        cosine
+        |> list.map(fn(row) { to_suggested(row, row.similarity) })
+        |> github.reject_hidden_statuses(hidden)
+        |> list.take(take)
+      #(hits, CosineFallback)
     }
   }
 }

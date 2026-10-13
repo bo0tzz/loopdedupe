@@ -44,7 +44,7 @@ Don't subscribe to other events (Pushes, etc.) — the handler returns 200 for a
 
 ### Mention bot
 
-Commenting `@loopdedupe` (override with the `BOT_HANDLE` env var) on any issue, PR, or discussion makes the bot search the corpus with the parent item's title+body and reply with the strongest matches (rerank score ≥ 50%, max 5, parent excluded). If nothing clears the floor it says so rather than staying silent. Mention again to re-run — e.g. after editing the description.
+Commenting `@loopdedupe` (override with the `BOT_HANDLE` env var) on any issue, PR, or discussion makes the bot search the corpus with the parent item's title+body and reply with the strongest matches (rerank score ≥ 50%, max 5, parent excluded). If nothing clears the floor it says so rather than staying silent. If the rerank call fails it retries and then gives up without replying, since cosine scores would clear the floor regardless of relevance. Mention again to re-run — e.g. after editing the description.
 
 Requires the GitHub App to have **Issues: write** (covers PR conversation comments too) and **Discussions: write** permissions. Replies embed an invisible `<!-- loopdedupe:reply:<comment_id> -->` marker used to keep retries from double-posting — no state is stored outside GitHub itself.
 

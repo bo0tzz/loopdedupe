@@ -1,4 +1,5 @@
 import api/dashboard
+import embeddings/voyage
 import github/graphql
 import github/types as github
 import gleam/option.{type Option, None, Some}
@@ -138,4 +139,31 @@ pub fn reject_hidden_statuses_not_planned_is_not_completed_test() {
   let items = [candidate(3, github.Closed, Some(github.NotPlanned))]
   assert github.reject_hidden_statuses(items, ["completed"]) == items
   assert github.reject_hidden_statuses(items, ["not_planned"]) == []
+}
+
+// --- rerank_batches ---------------------------------------------------------
+//
+// Voyage bills the query once per document, so each document costs
+// query + document bytes against the budget. Offsets must point at each
+// batch's first document in the original list, or merged scores land on the
+// wrong candidates.
+
+pub fn rerank_batches_fits_in_one_batch_test() {
+  assert voyage.rerank_batches("qq", ["aaa", "bbb"], 10)
+    == [#(0, ["aaa", "bbb"])]
+}
+
+pub fn rerank_batches_counts_query_once_per_document_test() {
+  // 2 + 3 = 5 per document: two fit in 10, the third starts a new batch.
+  assert voyage.rerank_batches("qq", ["aaa", "bbb", "ccc"], 10)
+    == [#(0, ["aaa", "bbb"]), #(2, ["ccc"])]
+}
+
+pub fn rerank_batches_oversized_document_gets_its_own_batch_test() {
+  assert voyage.rerank_batches("q", ["a", "way too long", "b"], 5)
+    == [#(0, ["a"]), #(1, ["way too long"]), #(2, ["b"])]
+}
+
+pub fn rerank_batches_no_documents_test() {
+  assert voyage.rerank_batches("q", [], 10) == []
 }

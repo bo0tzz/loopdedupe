@@ -231,31 +231,44 @@ fn compute_and_cache(db: pog.Connection, item_id: Int, hidden: List(String)) {
   case sql.suggest_duplicates(db, item_id, 0.65) {
     Ok(pog.Returned(_, rows)) -> {
       let candidates = list.map(rows, suggest_row_to_candidate)
-      let reranked = rerank_candidates(db, item_id, candidates)
-      // Persist the full reranked list so subsequent drill-ins are instant.
-      // Failures here aren't fatal — the user got their result, we just
-      // didn't manage to cache it for next time.
-      list.each(reranked, fn(c) {
-        case
-          sql.insert_rerank_score(
-            db,
-            item_id,
-            c.github_id,
-            c.suggested.similarity,
-          )
-        {
-          Ok(_) -> Nil
-          Error(e) ->
-            logging.log(
-              logging.Warning,
-              "failed to cache rerank score: " <> string.inspect(e),
-            )
+      let ranked = case rerank_candidates(db, item_id, candidates) {
+        Ok(reranked) -> {
+          // Persist the full reranked list so subsequent drill-ins are instant.
+          // Failures here aren't fatal — the user got their result, we just
+          // didn't manage to cache it for next time.
+          list.each(reranked, fn(c) {
+            case
+              sql.insert_rerank_score(
+                db,
+                item_id,
+                c.github_id,
+                c.suggested.similarity,
+              )
+            {
+              Ok(_) -> Nil
+              Error(e) ->
+                logging.log(
+                  logging.Warning,
+                  "failed to cache rerank score: " <> string.inspect(e),
+                )
+            }
+          })
+          reranked
         }
-      })
+        // Cosine order for this request only. Caching it would serve cosine
+        // scores as rerank scores until the source item is next edited.
+        Error(e) -> {
+          logging.log(
+            logging.Warning,
+            "rerank fell back to cosine: " <> snag.line_print(e),
+          )
+          candidates
+        }
+      }
       // Cache the full reranked list before filtering — the cache is shared
       // across every filter combination, so it must hold everything.
       let suggested =
-        list.map(reranked, fn(c) { c.suggested })
+        list.map(ranked, fn(c) { c.suggested })
         |> types.reject_hidden_statuses(hidden)
       Ok(types.SuggestedDuplicates(items: list.take(suggested, 10)))
     }
@@ -292,31 +305,19 @@ fn rerank_candidates(
   db: pog.Connection,
   item_id: Int,
   candidates: List(Candidate),
-) -> List(Candidate) {
+) -> Result(List(Candidate), snag.Snag) {
   case candidates {
-    [] -> []
-    [single] -> [single]
+    [] | [_] -> Ok(candidates)
     _ -> {
-      case sql.select_item(db, item_id) {
-        Ok(pog.Returned(1, [source])) -> {
-          let query_text = build_text(source.title, source.body)
-          let docs =
-            list.map(candidates, fn(c) {
-              voyage.clamp_rerank_doc(build_text(c.suggested.title, c.body))
-            })
-          case voyage.rerank(query_text, docs) {
-            Ok(scored) -> apply_rerank(candidates, scored)
-            Error(e) -> {
-              logging.log(
-                logging.Warning,
-                "rerank fell back to cosine: " <> snag.line_print(e),
-              )
-              candidates
-            }
-          }
-        }
-        _ -> candidates
-      }
+      use source <- result.try(case sql.select_item(db, item_id) {
+        Ok(pog.Returned(1, [source])) -> Ok(source)
+        Ok(_) -> snag.error("source item not found")
+        Error(e) -> snag.error(string.inspect(e))
+      })
+      let docs =
+        list.map(candidates, fn(c) { build_text(c.suggested.title, c.body) })
+      voyage.rerank(build_text(source.title, source.body), docs)
+      |> result.map(apply_rerank(candidates, _))
     }
   }
 }
