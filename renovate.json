@@ -11,12 +11,6 @@
     },
     {
       "matchDatasources": ["docker"],
-      "matchPackageNames": ["ghcr.io/gleam-lang/gleam"],
-      "allowedVersions": "< 1.17",
-      "description": "1.17+ ships an OTP point release that surfaces a deprecated-catch warning rebar3 escalates to an error inside the jose Erlang lib. Unpin once jose >1.11.12 ships a fix."
-    },
-    {
-      "matchDatasources": ["docker"],
       "matchPackageNames": ["ghcr.io/gleam-lang/gleam", "erlang"],
       "groupName": "gleam build + erlang runtime",
       "minimumGroupSize": 2,
