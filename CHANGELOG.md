@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.14](https://github.com/bo0tzz/loopdedupe/compare/v0.0.13...v0.0.14) (2026-10-13)
+
+
+### Bug Fixes
+
+* **rerank:** keep requests under voyage's token cap, don't cache cosine fallbacks ([eab5363](https://github.com/bo0tzz/loopdedupe/commit/eab5363e76e26bd03c06848b4eb4be460c0c190c))
+* **webhook:** log rejected signatures instead of every check result ([b305b2e](https://github.com/bo0tzz/loopdedupe/commit/b305b2e41d49ff18b86d7e1b222c68972c4fd688))
+
 ## [0.0.13](https://github.com/bo0tzz/loopdedupe/compare/v0.0.12...v0.0.13) (2026-09-16)
 
 
