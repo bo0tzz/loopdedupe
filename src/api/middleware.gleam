@@ -16,11 +16,12 @@ pub fn require_github_signature(
     Ok(signature) -> validate_signature(body, signature)
     Error(_) -> False
   }
-  wisp.log_info(bool.to_string(is_valid))
-
   case is_valid {
     True -> handler()
-    False -> wisp.response(401) |> wisp.string_body("invalid signature")
+    False -> {
+      wisp.log_warning("rejected webhook: missing or invalid signature")
+      wisp.response(401) |> wisp.string_body("invalid signature")
+    }
   }
 }
 
