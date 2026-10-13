@@ -36,7 +36,6 @@ packages = [
   { name = "gtempo", version = "7.4.0", build_tools = ["gleam"], requirements = ["gleam_stdlib", "gleam_time", "tzif"], otp_app = "gtempo", source = "hex", outer_checksum = "104E5FF7E0E1BE48B5B4F097F32D87EC98643C03ED9DF8277C19F896FCF91387" },
   { name = "houdini", version = "1.2.1", build_tools = ["gleam"], requirements = [], otp_app = "houdini", source = "hex", outer_checksum = "6F8AC2F12974567FB744BEA66AC93CEB76AAEA19AD28564623F76CDA9BC26A85" },
   { name = "hpack_erl", version = "0.3.0", build_tools = ["rebar3"], requirements = [], otp_app = "hpack", source = "hex", outer_checksum = "D6137D7079169D8C485C6962DFE261AF5B9EF60FBC557344511C1E65E3D95FB0" },
-  { name = "jose", version = "1.11.12", build_tools = ["mix", "rebar3"], requirements = [], otp_app = "jose", source = "hex", outer_checksum = "31E92B653E9210B696765CDD885437457DE1ADD2A9011D92F8CF63E4641BAB7B" },
   { name = "justin", version = "1.1.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "justin", source = "hex", outer_checksum = "8B1C62269E8607D0A0ED698B7903984CE0BF7B6B3C0DEA3C6C8302B39402837B" },
   { name = "lifeguard", version = "4.0.0", build_tools = ["gleam"], requirements = ["gleam_deque", "gleam_erlang", "gleam_otp", "gleam_stdlib"], otp_app = "lifeguard", source = "hex", outer_checksum = "31554E956FB93EC2BE46072C766D124E397EAD0DE0121463004523DD45AFCBF8" },
   { name = "logging", version = "1.5.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "logging", source = "hex", outer_checksum = "BC5F18CE5DD9686100229FE5409BDC3DD5C46D5A7DF2F804AD2D8F0DD6C5060E" },
@@ -77,7 +76,6 @@ gleam_regexp = { version = ">= 1.1.1 and < 2.0.0" }
 gleam_stdlib = { version = ">= 1.0.0 and < 2.0.0" }
 gleam_time = { version = ">= 1.5.0 and < 2.0.0" }
 gleeunit = { version = ">= 1.0.0 and < 2.0.0" }
-jose = { version = ">= 1.11.12 and < 2.0.0" }
 logging = { version = ">= 1.3.0 and < 2.0.0" }
 m25 = { git = "https://github.com/bo0tzz/m25.git", ref = "cigogne" }
 mist = { version = ">= 6.0.0 and < 7.0.0" }

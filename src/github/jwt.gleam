@@ -1,37 +1,31 @@
-//// Thin wrapper around the `jose` Erlang library to mint short-lived RS256
-//// JWTs for GitHub App authentication. The JWT itself isn't directly used
-//// against the API — it's traded for an installation access token (handled
-//// in `github/auth`).
+//// Mints short-lived RS256 JWTs for GitHub App authentication. The JWT
+//// itself isn't directly used against the API — it's traded for an
+//// installation access token (handled in `github/auth`).
+////
+//// Signed with OTP's public_key directly: one fixed algorithm doesn't need a
+//// JOSE library, and jose (the only one on hex) stopped compiling on OTP 29.
 
 import gleam/bit_array
-import gleam/dict.{type Dict}
-import gleam/dynamic.{type Dynamic}
 import gleam/int
 import gleam/json
 
-/// Opaque handles to jose's internal record types. We don't inspect them,
-/// just pass through.
-pub type Jwk
+type PemEntry
 
-pub type Signed
+type PrivateKey
 
-@external(erlang, "jose_jwk", "from_pem")
-fn jwk_from_pem(pem: BitArray) -> Jwk
+type DigestType {
+  Sha256
+}
 
-/// jose_jwt:sign(JWK, ProtectedHeader, Payload). Payload accepts a JSON
-/// binary which jose deserialises internally; we use that so we don't have
-/// to build a heterogeneous Erlang map from Gleam.
-@external(erlang, "jose_jwt", "sign")
-fn jwt_sign(
-  jwk: Jwk,
-  protected: Dict(BitArray, BitArray),
-  payload: BitArray,
-) -> Signed
+@external(erlang, "public_key", "pem_decode")
+fn pem_decode(pem: BitArray) -> List(PemEntry)
 
-/// jose_jws:compact/1 returns {Modules, CompactBinary}. We ignore the
-/// Modules tuple element.
-@external(erlang, "jose_jws", "compact")
-fn jws_compact(signed: Signed) -> #(Dynamic, BitArray)
+@external(erlang, "public_key", "pem_entry_decode")
+fn pem_entry_decode(entry: PemEntry) -> PrivateKey
+
+/// With an RSA key this is RSASSA-PKCS1-v1_5, which is what RS256 means.
+@external(erlang, "public_key", "sign")
+fn sign(message: BitArray, digest: DigestType, key: PrivateKey) -> BitArray
 
 /// Mint a fresh RS256 JWT identifying the GitHub App. GitHub allows up to
 /// 10 minutes of lifetime; 9 minutes here gives us a small buffer against
@@ -41,17 +35,26 @@ pub fn github_app_jwt(
   private_key_pem private_key_pem: String,
   iat iat: Int,
 ) -> String {
-  let jwk = jwk_from_pem(bit_array.from_string(private_key_pem))
-  let protected = dict.from_list([#(<<"alg":utf8>>, <<"RS256":utf8>>)])
+  let assert [entry, ..] = pem_decode(bit_array.from_string(private_key_pem))
+  let key = pem_entry_decode(entry)
+  let header =
+    json.object([
+      #("alg", json.string("RS256")),
+      #("typ", json.string("JWT")),
+    ])
   let payload =
     json.object([
       #("iat", json.int(iat)),
       #("exp", json.int(iat + 540)),
       #("iss", json.string(int.to_string(app_id))),
     ])
-    |> json.to_string
-    |> bit_array.from_string
-  let #(_, compact) = jws_compact(jwt_sign(jwk, protected, payload))
-  let assert Ok(s) = bit_array.to_string(compact)
-  s
+  let signing_input = segment(header) <> "." <> segment(payload)
+  let signature = sign(bit_array.from_string(signing_input), Sha256, key)
+  signing_input <> "." <> bit_array.base64_url_encode(signature, False)
+}
+
+fn segment(value: json.Json) -> String {
+  json.to_string(value)
+  |> bit_array.from_string
+  |> bit_array.base64_url_encode(False)
 }
