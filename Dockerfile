@@ -1,10 +1,14 @@
 # --- Build stage ------------------------------------------------------------
-# Uses gleam's official image, which bundles Erlang/OTP (v1.19.2-erlang ships
-# 29.1.1); the runtime stage must stay on the same OTP major. We export
-# an erlang-shipment, which is a self-contained directory of compiled BEAM
-# files for the app and all its deps plus an entrypoint script that boots
-# everything as an OTP release.
-FROM ghcr.io/gleam-lang/gleam:v1.19.2-erlang AS build
+# Plain erlang plus the static gleam binary, rather than gleam's -erlang image:
+# that one bundles whatever erlang:latest was when it was built, so a gleam
+# bump could silently move OTP out from under the runtime stage, which must
+# match its major. Spelled out here, Renovate can keep them together. We
+# export an erlang-shipment, which is a self-contained directory of compiled
+# BEAM files for the app and all its deps plus an entrypoint script that
+# boots everything as an OTP release.
+FROM erlang:29 AS build
+
+COPY --from=ghcr.io/gleam-lang/gleam:v1.19.2-scratch /bin/gleam /bin/gleam
 
 WORKDIR /build
 

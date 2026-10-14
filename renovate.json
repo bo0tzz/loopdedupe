@@ -10,11 +10,14 @@
       "groupName": "github actions"
     },
     {
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["ghcr.io/gleam-lang/gleam", "erlang"],
-      "groupName": "gleam build + erlang runtime",
-      "minimumGroupSize": 2,
-      "description": "Runtime erlang must match the OTP version bundled in the gleam build image. minimumGroupSize=2 postpones branch creation until both have a pending update so they bump as one PR — never bumping erlang alone."
+      "matchPackageNames": ["erlang", "erlang/otp"],
+      "groupName": "erlang/otp",
+      "description": "The Dockerfile build and runtime stages and CI's setup-beam move together: BEAM files compiled on one OTP major aren't guaranteed to load on another, and CI should test the OTP that ships."
+    },
+    {
+      "matchPackageNames": ["ghcr.io/gleam-lang/gleam", "gleam-lang/gleam"],
+      "groupName": "gleam",
+      "description": "The compiler that builds the image (Dockerfile) and the one CI tests with (setup-beam) move together."
     }
   ]
 }
