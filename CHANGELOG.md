@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.15](https://github.com/bo0tzz/loopdedupe/compare/v0.0.14...v0.0.15) (2026-10-14)
+
+
+### Bug Fixes
+
+* **embeddings:** re-embed edits, survive timed-out inserts, repair stragglers on startup ([77b1b72](https://github.com/bo0tzz/loopdedupe/commit/77b1b725a69e49b3e1f101e1e1789f3c582c889f))
+
 ## [0.0.14](https://github.com/bo0tzz/loopdedupe/compare/v0.0.13...v0.0.14) (2026-10-13)
 
 
