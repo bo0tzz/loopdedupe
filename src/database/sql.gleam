@@ -721,6 +721,28 @@ WHERE source_item_id = LEAST($1::bigint, $2::bigint)
   |> pog.execute(db)
 }
 
+/// Clear an item's own kNN edges before recomputing them, so a re-embedded
+/// item doesn't keep neighbours that only matched its old text.
+///
+/// > 🐿️ This function was generated automatically using v4.7.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn delete_outgoing_edges(
+  db: pog.Connection,
+  arg_1: Int,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "-- Clear an item's own kNN edges before recomputing them, so a re-embedded
+-- item doesn't keep neighbours that only matched its old text.
+DELETE FROM item_similarity_edges WHERE source_item_id = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(arg_1))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `get_rerank_cache` query
 /// defined in `./src/database/sql/get_rerank_cache.sql`.
 ///
@@ -1021,6 +1043,79 @@ pub fn invalidate_rerank_cache(
   |> pog.execute(db)
 }
 
+/// A row you get from running the `items_needing_reconcile` query
+/// defined in `./src/database/sql/items_needing_reconcile.sql`.
+///
+/// > 🐿️ This type definition was generated automatically using v4.7.0 of the
+/// > [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub type ItemsNeedingReconcileRow {
+  ItemsNeedingReconcileRow(
+    github_id: Int,
+    title: String,
+    body: String,
+    has_fresh_embedding: Bool,
+  )
+}
+
+/// Items the embed → similarity pipeline left behind, for the startup
+/// reconcile pass:
+/// - no embedding: every attempt failed (Voyage timeouts, oversized input)
+/// and nothing re-queued it
+/// - embedding older than the item's last update
+/// - embedding but not a single edge in either direction: an embed attempt
+/// whose insert committed but reported a timeout, so the retry skipped
+/// straight past the similarity step
+/// Re-queueing is deduped by content-versioned unique keys, so items that are
+/// legitimately edgeless (nothing within the edge threshold) or only got a
+/// comment or label since their embedding cost one no-op enqueue per startup.
+///
+/// > 🐿️ This function was generated automatically using v4.7.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn items_needing_reconcile(
+  db: pog.Connection,
+) -> Result(pog.Returned(ItemsNeedingReconcileRow), pog.QueryError) {
+  let decoder = {
+    use github_id <- decode.field(0, decode.int)
+    use title <- decode.field(1, decode.string)
+    use body <- decode.field(2, decode.string)
+    use has_fresh_embedding <- decode.field(3, decode.bool)
+    decode.success(ItemsNeedingReconcileRow(
+      github_id:,
+      title:,
+      body:,
+      has_fresh_embedding:,
+    ))
+  }
+
+  "-- Items the embed → similarity pipeline left behind, for the startup
+-- reconcile pass:
+--   - no embedding: every attempt failed (Voyage timeouts, oversized input)
+--     and nothing re-queued it
+--   - embedding older than the item's last update
+--   - embedding but not a single edge in either direction: an embed attempt
+--     whose insert committed but reported a timeout, so the retry skipped
+--     straight past the similarity step
+-- Re-queueing is deduped by content-versioned unique keys, so items that are
+-- legitimately edgeless (nothing within the edge threshold) or only got a
+-- comment or label since their embedding cost one no-op enqueue per startup.
+SELECT i.github_id,
+       i.title,
+       i.body,
+       e.item_id IS NOT NULL AND e.created_at >= i.github_updated_at AS has_fresh_embedding
+FROM items i
+         LEFT JOIN item_embeddings e ON e.item_id = i.github_id
+WHERE e.item_id IS NULL
+   OR e.created_at < i.github_updated_at
+   OR (NOT EXISTS (SELECT 1 FROM item_similarity_edges s WHERE s.source_item_id = i.github_id)
+       AND NOT EXISTS (SELECT 1 FROM item_similarity_edges s WHERE s.target_item_id = i.github_id));
+"
+  |> pog.query
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// A row you get from running the `latest_discussion_update` query
 /// defined in `./src/database/sql/latest_discussion_update.sql`.
 ///
@@ -1262,6 +1357,54 @@ ORDER BY j.judged_at DESC
 LIMIT 200;
 "
   |> pog.query
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Drop refreshed incoming edges that fell below compute_edges' threshold.
+///
+/// > 🐿️ This function was generated automatically using v4.7.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn prune_incoming_edges(
+  db: pog.Connection,
+  target_item_id: Int,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "-- Drop refreshed incoming edges that fell below compute_edges' threshold.
+DELETE FROM item_similarity_edges WHERE target_item_id = $1 AND similarity < 0.55;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(target_item_id))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
+/// Edges other items computed towards this one carry a similarity taken
+/// against its previous embedding; recompute them against the current one.
+///
+/// > 🐿️ This function was generated automatically using v4.7.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn refresh_incoming_edges(
+  db: pog.Connection,
+  s_target_item_id: Int,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "-- Edges other items computed towards this one carry a similarity taken
+-- against its previous embedding; recompute them against the current one.
+UPDATE item_similarity_edges s
+SET similarity = 1 - (src.embedding <=> tgt.embedding)
+FROM item_embeddings src,
+     item_embeddings tgt
+WHERE s.target_item_id = $1
+  AND src.item_id = s.source_item_id
+  AND tgt.item_id = $1;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(s_target_item_id))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }

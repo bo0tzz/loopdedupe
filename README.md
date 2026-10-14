@@ -36,7 +36,7 @@ Configure the repo webhook to `POST /api/webhooks/github`:
 - **Secret**: same value as the `GITHUB_WEBHOOK_SECRET` env var (HMAC-SHA256 signature is verified on every delivery)
 - **SSL verification**: enabled
 - **Which events**: select **"Let me select individual events"** and tick exactly:
-  - **Issues** — covers every issue action (opened / edited / closed / reopened / labeled / etc.). The handler upserts the item and re-embeds on every action; `closed` additionally triggers an incremental backfill to capture timeline-derived signals (canonical pointer, closer, MarkedAsDuplicate).
+  - **Issues** — covers every issue action (opened / edited / closed / reopened / labeled / etc.). The handler upserts the item and re-embeds when the title or body changed; `closed` additionally triggers an incremental backfill to capture timeline-derived signals (canonical pointer, closer, MarkedAsDuplicate).
   - **Discussions** — same shape as Issues, but the handler silently no-ops for any discussion outside the `feature-request` category (other categories aren't dedupe candidates).
   - **Issue comments** + **Discussion comments** — for the mention bot (below). Only comments containing the bot handle trigger anything; everything else is discarded.
 

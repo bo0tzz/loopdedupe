@@ -1,4 +1,5 @@
 import database/embeddings
+import database/sql
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -75,24 +76,38 @@ pub fn handle_similarity_job(
   similarity_job: SimilarityJob,
 ) -> Result(String, SimilarityJobError) {
   use <- logs.log_errors()
-  use pog.Returned(rows, _) <- result.try(
-    embeddings.compute_edges(conn, similarity_job.item_id)
+  let item_id = similarity_job.item_id
+  // One transaction so a drill-in never sees the item mid-recompute with its
+  // own edges cleared, and caches that half-empty candidate list.
+  use rows <- result.try(
+    pog.transaction(conn, fn(conn) {
+      use _ <- result.try(sql.delete_outgoing_edges(conn, item_id))
+      use pog.Returned(rows, _) <- result.try(embeddings.compute_edges(
+        conn,
+        item_id,
+      ))
+      use _ <- result.try(sql.refresh_incoming_edges(conn, item_id))
+      use _ <- result.try(sql.prune_incoming_edges(conn, item_id))
+      Ok(rows)
+    })
     |> result.map_error(fn(err) { string.inspect(err) |> map_string_to_error() }),
   )
+  // The cached rerank list was ranked from the old edges.
+  let _ = sql.invalidate_rerank_cache(conn, item_id)
   Ok(int.to_string(rows) <> " similarity edges inserted")
 }
 
-pub fn enqueue(conn: pog.Connection, item_id: Int) {
+/// `version` is the embedded text's content version (see
+/// embeddings.content_version): one recompute per version of the item, for
+/// the same reason the embeddings queue keys on it.
+pub fn enqueue(conn: pog.Connection, item_id: Int, version: String) {
   let job =
     m25.new_job(SimilarityJob(item_id:))
     |> m25.retry(3, option.Some(duration.seconds(30)))
-    // Dedupe per item like the embeddings queue does. A re-trigger of
-    // backfill enqueues similarity for every item it sees; without
-    // unique_key those would stack up.
-    |> m25.unique_key("similarity:" <> int.to_string(item_id))
+    |> m25.unique_key("similarity:" <> int.to_string(item_id) <> ":" <> version)
   case m25.enqueue(conn, queue_spec(conn), job) {
     Ok(_) -> Ok(Nil)
-    // A non-failed/non-cancelled job for this item already exists. That's
+    // A non-failed/non-cancelled job for this version already exists. That's
     // exactly the dedup we want — treat as success.
     Error(m25.JobRecordFetchQueryError(pog.ConstraintViolated(_, _, _))) ->
       Ok(Nil)

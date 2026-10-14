@@ -150,7 +150,7 @@ pub fn handle_backfill_job(
   // swallows ConstraintViolated, so this collects only the real errors.
   use _ <- result.try(
     list.map(items.items, fn(bi) {
-      embeddings.enqueue(ctx.db, bi.item.github_id)
+      embeddings.enqueue(ctx.db, bi.item.github_id, bi.item.title, bi.item.body)
     })
     |> result.all()
     |> result.map_error(map_error),

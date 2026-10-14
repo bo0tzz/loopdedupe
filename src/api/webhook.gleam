@@ -103,7 +103,11 @@ fn bot_handle() -> String {
 fn respond(result: Result(String, snag.Snag)) -> Response {
   case result {
     Ok(msg) -> wisp.response(200) |> wisp.string_body(msg)
-    Error(e) -> snag.line_print(e) |> wisp.bad_request
+    Error(e) -> {
+      let reason = snag.line_print(e)
+      wisp.log_warning("webhook rejected: " <> reason)
+      wisp.bad_request(reason)
+    }
   }
 }
 
@@ -117,7 +121,12 @@ fn handle_issue(body: String, ctx: Context) -> Result(String, snag.Snag) {
     |> snag.map_error(string.inspect),
   )
   use _ <- result.try(
-    embeddings.enqueue(ctx.db, webhook.item.github_id)
+    embeddings.enqueue(
+      ctx.db,
+      webhook.item.github_id,
+      webhook.item.title,
+      webhook.item.body,
+    )
     |> snag.map_error(string.inspect),
   )
   invalidate_rerank_for(ctx, webhook.item.github_id)
@@ -138,7 +147,12 @@ fn handle_discussion(body: String, ctx: Context) -> Result(String, snag.Snag) {
         |> snag.map_error(string.inspect),
       )
       use _ <- result.try(
-        embeddings.enqueue(ctx.db, webhook.item.github_id)
+        embeddings.enqueue(
+          ctx.db,
+          webhook.item.github_id,
+          webhook.item.title,
+          webhook.item.body,
+        )
         |> snag.map_error(string.inspect),
       )
       invalidate_rerank_for(ctx, webhook.item.github_id)

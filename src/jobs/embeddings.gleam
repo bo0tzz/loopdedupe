@@ -3,6 +3,8 @@ import database/item
 import database/sql
 import embeddings/voyage
 import github/types as github
+import gleam/bit_array
+import gleam/crypto
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -97,11 +99,26 @@ pub fn handle_embeddings_job(
   // Short-circuit if we already have an up-to-date embedding for this
   // item under the current model. Cheap DB check; avoids paying for a
   // voyage call on every re-backfill of unchanged items.
-  case sql.has_fresh_embedding(conn, item.github_id, model_name) {
-    Ok(pog.Returned(_, [sql.HasFreshEmbeddingRow(True)])) ->
-      Ok("skipped — already embedded")
-    _ -> embed_and_store(conn, item, model, model_name)
-  }
+  use outcome <- result.try(
+    case sql.has_fresh_embedding(conn, item.github_id, model_name) {
+      Ok(pog.Returned(_, [sql.HasFreshEmbeddingRow(True)])) ->
+        Ok("skipped — already embedded")
+      _ -> embed_and_store(conn, item, model, model_name)
+    },
+  )
+  // Queued from the skip path too: when an insert commits but reports a
+  // timeout, the retry finds a fresh embedding and lands here without ever
+  // having reached a similarity step. Deduped per content version, so for
+  // an unchanged item this is a no-op.
+  use _ <- result.try(
+    similarity.enqueue(
+      conn,
+      item.github_id,
+      content_version(item.title, item.body),
+    )
+    |> result.map_error(fn(err) { string.inspect(err) |> map_string_to_error() }),
+  )
+  Ok(outcome)
 }
 
 fn embed_and_store(
@@ -129,27 +146,49 @@ fn embed_and_store(
     |> result.map_error(fn(err) { string.inspect(err) |> map_string_to_error() }),
   )
 
-  let _ = similarity.enqueue(conn, item.github_id)
   Ok(int.to_string(rows) <> " embedding rows inserted")
 }
 
-pub fn enqueue(conn: pog.Connection, item_id: Int) {
+/// Deduped per content version rather than per item: the unique index on
+/// m25.job covers every non-failed, non-cancelled status, so a per-item key
+/// meant an item's first successful embedding was its last, and edits were
+/// never re-embedded. Keyed on the text, re-backfills and label or comment
+/// events still no-op against the job that already ran for it, while an
+/// actual edit gets a job of its own. Failed rows are excluded from the
+/// index, so retries after a real failure still go through. An exact revert
+/// to earlier text matches that text's finished job and keeps the newer
+/// embedding until the next edit.
+pub fn enqueue(
+  conn: pog.Connection,
+  item_id: Int,
+  title: String,
+  body: String,
+) {
   let job =
     m25.new_job(EmbeddingsJob(item_id:))
     |> m25.retry(3, option.Some(duration.seconds(30)))
-    // Dedupe per item — the unique index on m25.job covers all non-failed,
-    // non-cancelled statuses, so this no-ops while a job is pending/running
-    // or has already succeeded, but still allows retries after a real
-    // failure since failed rows are excluded from the index.
-    |> m25.unique_key("embeddings:" <> int.to_string(item_id))
+    |> m25.unique_key(
+      "embeddings:"
+      <> int.to_string(item_id)
+      <> ":"
+      <> content_version(title, body),
+    )
   case m25.enqueue(conn, queue_spec(conn), job) {
     Ok(_) -> Ok(Nil)
     // unique_key collision: a non-finished or already-succeeded job exists
-    // for this item. That's exactly the desired outcome — no extra work
+    // for this version of the item. That's exactly the desired outcome — no extra work
     // gets enqueued, and we don't want to roll back the surrounding
     // transaction over a successful no-op.
     Error(m25.JobRecordFetchQueryError(pog.ConstraintViolated(_, _, _))) ->
       Ok(Nil)
     Error(e) -> Error(e)
   }
+}
+
+/// Short fingerprint of the text an item is embedded from, for job dedupe
+/// keys.
+pub fn content_version(title: String, body: String) -> String {
+  crypto.hash(crypto.Sha256, bit_array.from_string(title <> "\n\n" <> body))
+  |> bit_array.base16_encode
+  |> string.slice(0, 16)
 }

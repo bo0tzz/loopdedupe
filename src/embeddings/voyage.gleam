@@ -116,7 +116,13 @@ fn expect_json_response(
   continue: fn(EmbedResponse) -> Result(a, snag.Snag),
 ) -> Result(a, snag.Snag) {
   use <- bool.lazy_guard(resp.status != 200, fn() {
-    let error = snag.new("expected 200 but got " <> int.to_string(resp.status))
+    let error =
+      snag.new(
+        "expected 200 but got "
+        <> int.to_string(resp.status)
+        <> ": "
+        <> resp.body,
+      )
     logging.log(logging.Warning, snag.line_print(error))
     Error(error)
   })
@@ -273,7 +279,9 @@ pub fn embed(
     EmbedRequest(
       input: [text],
       model: model,
-      truncation: False,
+      // Without it, anything past the model's context 400s on every attempt
+      // and the item never gets an embedding at all.
+      truncation: True,
       output_dimension: Dim2048,
       input_type: "document",
     )

@@ -3,6 +3,7 @@ import database/connection
 import github/auth
 import gleam/erlang/process
 import gleam/otp/static_supervisor
+import jobs/reconcile
 import jobs/setup
 import logging
 import pog
@@ -29,5 +30,6 @@ fn start_supervisor(ctx: Context) {
   |> static_supervisor.add(auth.supervised(ctx.auth))
   |> static_supervisor.add(setup.supervised(ctx))
   |> static_supervisor.add(router.supervised(ctx))
+  |> static_supervisor.add(reconcile.supervised(ctx))
   |> static_supervisor.start()
 }
