@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.16](https://github.com/bo0tzz/loopdedupe/compare/v0.0.15...v0.0.16) (2026-10-14)
+
+
+### Bug Fixes
+
+* **reconcile:** give the startup query a 60s deadline ([7fdc366](https://github.com/bo0tzz/loopdedupe/commit/7fdc366860a853f25aaf1a25389320d81ae7f435))
+
 ## [0.0.15](https://github.com/bo0tzz/loopdedupe/compare/v0.0.14...v0.0.15) (2026-10-14)
 
 
