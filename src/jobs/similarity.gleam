@@ -78,19 +78,8 @@ pub fn handle_similarity_job(
 ) -> Result(String, SimilarityJobError) {
   use <- logs.log_errors()
   let item_id = similarity_job.item_id
-  // One transaction so a drill-in never sees the item mid-recompute with its
-  // own edges cleared, and caches that half-empty candidate list.
-  use rows <- result.try(
-    pog.transaction(conn, fn(conn) {
-      use _ <- result.try(sql.delete_outgoing_edges(conn, item_id))
-      use pog.Returned(rows, _) <- result.try(embeddings.compute_edges(
-        conn,
-        item_id,
-      ))
-      use _ <- result.try(sql.refresh_incoming_edges(conn, item_id))
-      use _ <- result.try(sql.prune_incoming_edges(conn, item_id))
-      Ok(rows)
-    })
+  use pog.Returned(rows, _) <- result.try(
+    embeddings.compute_edges(conn, item_id)
     |> result.map_error(fn(err) { string.inspect(err) |> map_string_to_error() }),
   )
   // The cached rerank list was ranked from the old edges.

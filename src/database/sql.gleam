@@ -246,67 +246,6 @@ WHERE github_id = $1;
   |> pog.execute(db)
 }
 
-/// Recomputes the outgoing similarity edges for one item. Idempotent via
-/// ON CONFLICT so this can re-run for an existing source.
-///
-/// kNN=200 (up from 50): at 50, ~20% of ground-truth dupe pairs were cut by
-/// the limit despite scoring well above threshold. 200 keeps the storage
-/// bounded but recovers the long tail.
-///
-/// Threshold=0.55: with voyage-4-large + input_type=document the random
-/// noise floor median is ~0.52, so 0.55 sits just above it and recovers
-/// the low-end tail of real dupes scoring 0.55-0.65. False-positive pairs
-/// at this level get filtered by the candidates-feed's "at least one
-/// open" / chain-resolution logic and the dashboard's 0.80 display floor.
-///
-/// > 🐿️ This function was generated automatically using v4.7.0 of
-/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub fn compute_edges(
-  db: pog.Connection,
-  arg_1: Int,
-) -> Result(pog.Returned(Nil), pog.QueryError) {
-  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
-
-  "-- Recomputes the outgoing similarity edges for one item. Idempotent via
--- ON CONFLICT so this can re-run for an existing source.
---
--- kNN=200 (up from 50): at 50, ~20% of ground-truth dupe pairs were cut by
--- the limit despite scoring well above threshold. 200 keeps the storage
--- bounded but recovers the long tail.
---
--- Threshold=0.55: with voyage-4-large + input_type=document the random
--- noise floor median is ~0.52, so 0.55 sits just above it and recovers
--- the low-end tail of real dupes scoring 0.55-0.65. False-positive pairs
--- at this level get filtered by the candidates-feed's \"at least one
--- open\" / chain-resolution logic and the dashboard's 0.80 display floor.
-WITH item_embedding AS (SELECT embedding
-                        FROM item_embeddings
-                        WHERE item_id = $1),
-     similar_items AS (SELECT e.item_id,
-                              1 - (e.embedding <=> (SELECT embedding FROM item_embedding)) as similarity
-                       FROM item_embeddings e
-                       WHERE e.item_id != $1
-                       ORDER BY e.embedding <=> (SELECT embedding FROM item_embedding)
-                       LIMIT 200)
-INSERT
-INTO item_similarity_edges
-    (source_item_id, target_item_id, similarity, edge_type)
-SELECT $1,
-       item_id,
-       similarity,
-       'computed'
-FROM similar_items
-WHERE similarity >= 0.55
-ON CONFLICT (source_item_id, target_item_id)
-DO UPDATE SET similarity = EXCLUDED.similarity, edge_type = EXCLUDED.edge_type
-"
-  |> pog.query
-  |> pog.parameter(pog.int(arg_1))
-  |> pog.returning(decoder)
-  |> pog.execute(db)
-}
-
 /// A row you get from running the `dashboard_recent_items` query
 /// defined in `./src/database/sql/dashboard_recent_items.sql`.
 ///
@@ -717,28 +656,6 @@ WHERE source_item_id = LEAST($1::bigint, $2::bigint)
   |> pog.parameter(pog.int(arg_1))
   |> pog.parameter(pog.int(arg_2))
   |> pog.parameter(pair_verdict_encoder(arg_3))
-  |> pog.returning(decoder)
-  |> pog.execute(db)
-}
-
-/// Clear an item's own kNN edges before recomputing them, so a re-embedded
-/// item doesn't keep neighbours that only matched its old text.
-///
-/// > 🐿️ This function was generated automatically using v4.7.0 of
-/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub fn delete_outgoing_edges(
-  db: pog.Connection,
-  arg_1: Int,
-) -> Result(pog.Returned(Nil), pog.QueryError) {
-  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
-
-  "-- Clear an item's own kNN edges before recomputing them, so a re-embedded
--- item doesn't keep neighbours that only matched its old text.
-DELETE FROM item_similarity_edges WHERE source_item_id = $1;
-"
-  |> pog.query
-  |> pog.parameter(pog.int(arg_1))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
@@ -1284,54 +1201,6 @@ ORDER BY j.judged_at DESC
 LIMIT 200;
 "
   |> pog.query
-  |> pog.returning(decoder)
-  |> pog.execute(db)
-}
-
-/// Drop refreshed incoming edges that fell below compute_edges' threshold.
-///
-/// > 🐿️ This function was generated automatically using v4.7.0 of
-/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub fn prune_incoming_edges(
-  db: pog.Connection,
-  target_item_id: Int,
-) -> Result(pog.Returned(Nil), pog.QueryError) {
-  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
-
-  "-- Drop refreshed incoming edges that fell below compute_edges' threshold.
-DELETE FROM item_similarity_edges WHERE target_item_id = $1 AND similarity < 0.55;
-"
-  |> pog.query
-  |> pog.parameter(pog.int(target_item_id))
-  |> pog.returning(decoder)
-  |> pog.execute(db)
-}
-
-/// Edges other items computed towards this one carry a similarity taken
-/// against its previous embedding; recompute them against the current one.
-///
-/// > 🐿️ This function was generated automatically using v4.7.0 of
-/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
-///
-pub fn refresh_incoming_edges(
-  db: pog.Connection,
-  s_target_item_id: Int,
-) -> Result(pog.Returned(Nil), pog.QueryError) {
-  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
-
-  "-- Edges other items computed towards this one carry a similarity taken
--- against its previous embedding; recompute them against the current one.
-UPDATE item_similarity_edges s
-SET similarity = 1 - (src.embedding <=> tgt.embedding)
-FROM item_embeddings src,
-     item_embeddings tgt
-WHERE s.target_item_id = $1
-  AND src.item_id = s.source_item_id
-  AND tgt.item_id = $1;
-"
-  |> pog.query
-  |> pog.parameter(pog.int(s_target_item_id))
   |> pog.returning(decoder)
   |> pog.execute(db)
 }
