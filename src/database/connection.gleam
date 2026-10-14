@@ -13,6 +13,10 @@ pub fn supervised(
 ) -> supervision.ChildSpecification(pog.Connection) {
   let db_url = env.get_env(env.DatabaseUrl)
   let assert Ok(cfg) = pog.url_config(ctx.db_name, db_url)
+  // pog defaults to 10, below what the job queues can run at once. A burst
+  // like the startup reconcile then left webhooks, health probes and the
+  // queues' own polling waiting on a connection until checkouts failed.
+  let cfg = pog.pool_size(cfg, 24)
   let start = fn() {
     let res = pog.start(cfg)
 

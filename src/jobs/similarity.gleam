@@ -52,9 +52,10 @@ fn similarity_job_decoder() -> decode.Decoder(SimilarityJob) {
 pub fn queue_spec(conn: pog.Connection) {
   m25.Queue(
     name: "similarity",
-    // Local pgvector kNN — no external rate limit, just postgres CPU. 16
-    // workers keeps the queue draining without hammering the DB.
-    max_concurrency: 16,
+    // Local kNN plus the edge rewrite in one transaction, so every running
+    // job holds a pool connection until it finishes. Kept well under the
+    // pool size so the other queues and HTTP still get one.
+    max_concurrency: 8,
     input_to_json: similarity_job_to_json,
     input_decoder: similarity_job_decoder(),
     output_to_json: json.string,
