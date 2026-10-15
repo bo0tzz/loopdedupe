@@ -1,6 +1,8 @@
 import database/sql
 import embeddings/voyage
 import github/types
+import gleam/dict.{type Dict}
+import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option}
@@ -165,57 +167,31 @@ pub fn suggest_duplicates(
   item_id: Int,
   hidden: List(String),
 ) {
-  // Two-stage retrieval with lazy cache:
-  //   1. If item_rerank_cache has rows for this source, serve from there.
-  //   2. Otherwise: pull the top-50 cosine candidates (threshold 0.75 —
-  //      tuned for ~94% recall on ground-truth dupes), ask Voyage
-  //      rerank-2.5 to rescore them with the full text, store the scores
-  //      in the cache, and return the top 10.
+  // Two-stage retrieval: the top cosine candidates, rescored by Voyage
+  // rerank-2.5 with the full text.
   //
   // Cosine on Voyage-3-large gets the right ballpark cheaply; rerank
   // catches the cases where vector similarity ranks two structurally
-  // similar but semantically different reports too closely. The cache
-  // means a maintainer drilling into the same issue twice pays the
-  // Voyage roundtrip exactly once.
-  case sql.has_rerank_cache(db, item_id) {
-    Ok(pog.Returned(_, [row])) ->
-      case row.cached {
-        True -> read_from_cache(db, item_id, hidden)
-        False -> compute_and_cache(db, item_id, hidden)
-      }
-    _ -> compute_and_cache(db, item_id, hidden)
-  }
-}
-
-fn read_from_cache(db: pog.Connection, item_id: Int, hidden: List(String)) {
-  case sql.get_rerank_cache(db, item_id) {
-    Ok(pog.Returned(_, rows)) -> {
-      let items =
-        list.map(rows, fn(row) {
-          let sql.GetRerankCacheRow(
-            target_item_id: _,
-            relevance_score:,
-            number:,
-            item_type:,
-            title:,
-            state:,
-            state_reason:,
-          ) = row
-          types.SuggestedDuplicate(
-            similarity: relevance_score,
-            title:,
-            number:,
-            item_type: sql_into_item_type(item_type),
-            state: sql_into_state(state),
-            state_reason: sql_into_state_reason(state_reason),
-          )
-        })
-        |> types.reject_hidden_statuses(hidden)
-        |> list.take(10)
-      Ok(types.SuggestedDuplicates(items:))
-    }
-    Error(e) -> Error(e)
-  }
+  // similar but semantically different reports too closely.
+  //
+  // Threshold 0.65 for voyage-4-large + input_type=document. Noise p95 is
+  // 0.68 so 0.65 sits just below — caught dupes get reranked, the
+  // borderline noise gets filtered out by the rerank's heavier model.
+  use pog.Returned(_, rows) <- result.try(sql.suggest_duplicates(
+    db,
+    item_id,
+    0.65,
+  ))
+  use pog.Returned(_, stored) <- result.try(sql.get_rerank_scores(db, item_id))
+  let stored =
+    list.map(stored, fn(row) { #(row.target_item_id, row.relevance_score) })
+    |> dict.from_list
+  let suggested =
+    list.map(rows, suggest_row_to_candidate)
+    |> rank(db, item_id, _, stored)
+    |> list.map(fn(c) { c.suggested })
+    |> types.reject_hidden_statuses(hidden)
+  Ok(types.SuggestedDuplicates(items: list.take(suggested, 10)))
 }
 
 type Candidate {
@@ -224,55 +200,59 @@ type Candidate {
   Candidate(suggested: types.SuggestedDuplicate, body: String, github_id: Int)
 }
 
-fn compute_and_cache(db: pog.Connection, item_id: Int, hidden: List(String)) {
-  // Threshold 0.65 for voyage-4-large + input_type=document. Noise p95 is
-  // 0.68 so 0.65 sits just below — caught dupes get reranked, the
-  // borderline noise gets filtered out by the rerank's heavier model.
-  case sql.suggest_duplicates(db, item_id, 0.65) {
-    Ok(pog.Returned(_, rows)) -> {
-      let candidates = list.map(rows, suggest_row_to_candidate)
-      let ranked = case rerank_candidates(db, item_id, candidates) {
-        Ok(reranked) -> {
-          // Persist the full reranked list so subsequent drill-ins are instant.
-          // Failures here aren't fatal — the user got their result, we just
-          // didn't manage to cache it for next time.
-          list.each(reranked, fn(c) {
-            case
-              sql.insert_rerank_score(
-                db,
-                item_id,
-                c.github_id,
-                c.suggested.similarity,
-              )
-            {
-              Ok(_) -> Nil
-              Error(e) ->
-                logging.log(
-                  logging.Warning,
-                  "failed to cache rerank score: " <> string.inspect(e),
-                )
-            }
-          })
-          reranked
-        }
-        // Cosine order for this request only. Caching it would serve cosine
-        // scores as rerank scores until the source item is next edited.
-        Error(e) -> {
-          logging.log(
-            logging.Warning,
-            "rerank fell back to cosine: " <> snag.line_print(e),
+// Only the scores are stored, per pair, and the candidate list is rebuilt on
+// every visit: edges keep changing as other items get embedded, and a stored
+// list froze whatever existed at first view. Candidates without a stored
+// score are the only ones that cost a Voyage call.
+fn rank(
+  db: pog.Connection,
+  item_id: Int,
+  candidates: List(Candidate),
+  stored: Dict(Int, Float),
+) -> List(Candidate) {
+  let #(known, unscored) =
+    list.map(candidates, fn(c) {
+      dict.get(stored, c.github_id)
+      |> result.map(with_score(c, _))
+      |> result.replace_error(c)
+    })
+    |> result.partition
+  case rerank_candidates(db, item_id, unscored) {
+    Ok(reranked) -> {
+      // Failures here aren't fatal — the user got their result, we just
+      // didn't manage to store it for next time.
+      list.each(reranked, fn(c) {
+        case
+          sql.insert_rerank_score(
+            db,
+            item_id,
+            c.github_id,
+            c.suggested.similarity,
           )
-          candidates
+        {
+          Ok(_) -> Nil
+          Error(e) ->
+            logging.log(
+              logging.Warning,
+              "failed to cache rerank score: " <> string.inspect(e),
+            )
         }
-      }
-      // Cache the full reranked list before filtering — the cache is shared
-      // across every filter combination, so it must hold everything.
-      let suggested =
-        list.map(ranked, fn(c) { c.suggested })
-        |> types.reject_hidden_statuses(hidden)
-      Ok(types.SuggestedDuplicates(items: list.take(suggested, 10)))
+      })
+      list.append(known, reranked)
+      |> list.sort(fn(a, b) {
+        float.compare(b.suggested.similarity, a.suggested.similarity)
+      })
     }
-    Error(e) -> Error(e)
+    // Cosine order for this request only. Storing it would serve cosine
+    // scores as rerank scores until either item is next edited, and mixing
+    // it with the stored scores would rank across two different scales.
+    Error(e) -> {
+      logging.log(
+        logging.Warning,
+        "rerank fell back to cosine: " <> snag.line_print(e),
+      )
+      candidates
+    }
   }
 }
 
@@ -307,7 +287,7 @@ fn rerank_candidates(
   candidates: List(Candidate),
 ) -> Result(List(Candidate), snag.Snag) {
   case candidates {
-    [] | [_] -> Ok(candidates)
+    [] -> Ok([])
     _ -> {
       use source <- result.try(case sql.select_item(db, item_id) {
         Ok(pog.Returned(1, [source])) -> Ok(source)
@@ -349,21 +329,19 @@ fn apply_rerank(
         }
       })
     {
-      Ok(c) ->
-        // Replace the cosine score with the rerank score so downstream
-        // consumers (cache, UI, JSON) see rerank relevance.
-        Ok(
-          Candidate(
-            ..c,
-            suggested: types.SuggestedDuplicate(
-              ..c.suggested,
-              similarity: r.score,
-            ),
-          ),
-        )
+      // Replace the cosine score with the rerank score so downstream
+      // consumers (cache, UI, JSON) see rerank relevance.
+      Ok(c) -> Ok(with_score(c, r.score))
       Error(_) -> Error(Nil)
     }
   })
+}
+
+fn with_score(c: Candidate, score: Float) -> Candidate {
+  Candidate(
+    ..c,
+    suggested: types.SuggestedDuplicate(..c.suggested, similarity: score),
+  )
 }
 
 fn map_item(

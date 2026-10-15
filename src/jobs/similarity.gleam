@@ -1,5 +1,4 @@
 import database/embeddings
-import database/sql
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -77,13 +76,10 @@ pub fn handle_similarity_job(
   similarity_job: SimilarityJob,
 ) -> Result(String, SimilarityJobError) {
   use <- logs.log_errors()
-  let item_id = similarity_job.item_id
   use pog.Returned(rows, _) <- result.try(
-    embeddings.compute_edges(conn, item_id)
+    embeddings.compute_edges(conn, similarity_job.item_id)
     |> result.map_error(fn(err) { string.inspect(err) |> map_string_to_error() }),
   )
-  // The cached rerank list was ranked from the old edges.
-  let _ = sql.invalidate_rerank_cache(conn, item_id)
   Ok(int.to_string(rows) <> " similarity edges inserted")
 }
 

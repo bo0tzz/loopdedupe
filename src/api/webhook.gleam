@@ -172,9 +172,10 @@ type Kind {
   DiscussionKind
 }
 
-// Drop the per-source rerank cache so the next drill-in recomputes against
-// the freshly-updated content. Cheap (one DELETE), fire-and-forget — even
-// if it fails the cache just stays stale, no correctness issue.
+// Drop the rerank scores this item takes part in, so the next drill-in on
+// either side rescores against the freshly-updated content. Cheap (one
+// DELETE), fire-and-forget — even if it fails the scores just stay stale,
+// no correctness issue.
 fn invalidate_rerank_for(ctx: Context, github_id: Int) -> Nil {
   let _ = sql.invalidate_rerank_cache(ctx.db, github_id)
   Nil
