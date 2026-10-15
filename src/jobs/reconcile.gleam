@@ -42,9 +42,10 @@ type Candidate {
 ///   - no embedding: every attempt failed (Voyage timeouts, oversized input)
 ///     and nothing re-queued it
 ///   - embedding older than the item's last update
-///   - embedding but not a single edge in either direction: an embed attempt
-///     whose insert committed but reported a timeout, so the retry skipped
-///     straight past the similarity step
+///   - embedding but no outgoing edges: an embed attempt whose insert
+///     committed but reported a timeout, so the retry skipped straight past
+///     the similarity step. Incoming edges don't count: other items' jobs
+///     keep adding those, and they hide that this item's own never ran.
 /// Re-queueing is deduped by content-versioned unique keys, so items that are
 /// legitimately edgeless (nothing within the edge threshold) or only got a
 /// comment or label since their embedding cost one no-op enqueue per startup.
@@ -66,8 +67,7 @@ fn items_needing_reconcile(
             LEFT JOIN item_embeddings e ON e.item_id = i.github_id
    WHERE e.item_id IS NULL
       OR e.created_at < i.github_updated_at
-      OR (NOT EXISTS (SELECT 1 FROM item_similarity_edges s WHERE s.source_item_id = i.github_id)
-          AND NOT EXISTS (SELECT 1 FROM item_similarity_edges s WHERE s.target_item_id = i.github_id))"
+      OR NOT EXISTS (SELECT 1 FROM item_similarity_edges s WHERE s.source_item_id = i.github_id)"
   |> pog.query
   |> pog.timeout(query_timeout_ms)
   |> pog.returning(decoder)
