@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.17](https://github.com/bo0tzz/loopdedupe/compare/v0.0.16...v0.0.17) (2026-10-15)
+
+
+### Bug Fixes
+
+* **db:** size the connection pool for the job queues ([3017249](https://github.com/bo0tzz/loopdedupe/commit/3017249786d70d193318e975a73bf310b2bec6c6))
+* **reconcile:** repair items whose own similarity job never ran ([46909a3](https://github.com/bo0tzz/loopdedupe/commit/46909a3838c0c46ddee7698b993a6f8041db1e58))
+* **rerank:** store drill-in scores per pair, rebuild the list each visit ([11e4fc0](https://github.com/bo0tzz/loopdedupe/commit/11e4fc06b362b2ca26c4c4044a20e215d3352698))
+* **similarity:** rewrite only the item's own edges, in one statement ([8800449](https://github.com/bo0tzz/loopdedupe/commit/88004496f1ea4faad2d38530c2486a4793718d83))
+
 ## [0.0.16](https://github.com/bo0tzz/loopdedupe/compare/v0.0.15...v0.0.16) (2026-10-14)
 
 
