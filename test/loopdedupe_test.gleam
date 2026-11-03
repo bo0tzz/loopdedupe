@@ -2,7 +2,9 @@ import api/dashboard
 import embeddings/voyage
 import github/graphql
 import github/types as github
+import gleam/json
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleeunit
 
 pub fn main() -> Nil {
@@ -166,4 +168,58 @@ pub fn rerank_batches_oversized_document_gets_its_own_batch_test() {
 
 pub fn rerank_batches_no_documents_test() {
   assert voyage.rerank_batches("q", [], 10) == []
+}
+
+// --- discussion webhook state ----------------------------------------------
+//
+// Converting an issue sends the new discussion's webhook with state
+// "converting"; rejecting that dropped the discussion for good, since the
+// incremental backfill's boundary moves past it with the next webhook.
+
+fn discussion_webhook(state: String, state_reason: String) -> String {
+  "{\"action\": \"created\", \"discussion\": {
+    \"id\": 11214888, \"number\": 32924, \"title\": \"t\", \"body\": \"b\",
+    \"state\": \"" <> state <> "\", \"state_reason\": " <> state_reason <> ",
+    \"html_url\": \"https://github.com/immich-app/immich/discussions/32924\",
+    \"created_at\": \"2026-11-03T06:09:01Z\",
+    \"updated_at\": \"2026-11-03T10:55:05Z\",
+    \"category\": {\"slug\": \"feature-request\"}}}"
+}
+
+fn discussion_state(
+  state: String,
+  state_reason: String,
+) -> Result(github.ItemState, Nil) {
+  json.parse(
+    discussion_webhook(state, state_reason),
+    github.discussion_webhook_decoder(),
+  )
+  |> result.map(fn(webhook) { webhook.item.state })
+  |> result.replace_error(Nil)
+}
+
+pub fn discussion_webhook_converting_is_open_test() {
+  let assert Ok(webhook) =
+    json.parse(
+      discussion_webhook("converting", "null"),
+      github.discussion_webhook_decoder(),
+    )
+  assert webhook.item.state == github.Open
+  assert webhook.item.number == 32_924
+  assert webhook.category_slug == "feature-request"
+}
+
+pub fn discussion_webhook_transferring_is_open_test() {
+  assert discussion_state("transferring", "null") == Ok(github.Open)
+}
+
+pub fn discussion_webhook_locked_follows_state_reason_test() {
+  assert discussion_state("locked", "null") == Ok(github.Open)
+  assert discussion_state("locked", "\"reopened\"") == Ok(github.Open)
+  assert discussion_state("locked", "\"resolved\"") == Ok(github.Closed)
+  assert discussion_state("locked", "\"duplicate\"") == Ok(github.Closed)
+}
+
+pub fn discussion_webhook_unknown_state_is_rejected_test() {
+  assert discussion_state("archived", "null") == Error(Nil)
 }

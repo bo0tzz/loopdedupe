@@ -18,12 +18,19 @@ fn item_state_to_json(state: ItemState) -> json.Json {
   }
 }
 
-fn item_state_decoder() {
+// Issues only ever say "open" or "closed". Discussion webhooks have three
+// more: "converting" and "transferring" while the discussion is being made
+// from an issue or moved in from another repository, and "locked", which
+// says nothing about open or closed, so the state reason decides.
+fn item_state_decoder(state_reason: Option(ItemStateReason)) {
   use string <- decode.then(decode.string)
-  case string |> string.lowercase() {
-    "open" -> decode.success(Open)
-    "closed" -> decode.success(Closed)
-    _ -> decode.failure(Open, "ItemState")
+  case string.lowercase(string), state_reason {
+    "open", _ | "converting", _ | "transferring", _ -> decode.success(Open)
+    "closed", _ -> decode.success(Closed)
+    "locked", option.None | "locked", option.Some(Reopened) ->
+      decode.success(Open)
+    "locked", option.Some(_) -> decode.success(Closed)
+    _, _ -> decode.failure(Open, "ItemState")
   }
 }
 
@@ -127,7 +134,6 @@ pub fn issue_decoder() {
   use number <- decode.field("number", decode.int)
   use title <- decode.field("title", safe_string())
   use body <- decode.field("body", safe_string())
-  use state <- decode.field("state", item_state_decoder())
   let state_reason_decoder =
     decode.one_of(
       decode.at(["state_reason"], decode.optional(item_state_reason_decoder())),
@@ -136,6 +142,7 @@ pub fn issue_decoder() {
       ],
     )
   use state_reason <- decode.then(state_reason_decoder)
+  use state <- decode.field("state", item_state_decoder(state_reason))
   // REST payloads carry both `url` (the api.github.com API URL) and `html_url`
   // (the web UI URL); we want the latter. GraphQL only has `url`, and there it
   // already is the web URL, so it's the correct fallback.
