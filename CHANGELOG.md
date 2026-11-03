@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.18](https://github.com/bo0tzz/loopdedupe/compare/v0.0.17...v0.0.18) (2026-11-03)
+
+
+### Bug Fixes
+
+* **webhook:** accept discussions that are mid-conversion or transfer ([526a602](https://github.com/bo0tzz/loopdedupe/commit/526a602969056ffef8c9f732a01392625cd22120))
+
 ## [0.0.17](https://github.com/bo0tzz/loopdedupe/compare/v0.0.16...v0.0.17) (2026-10-15)
 
 
