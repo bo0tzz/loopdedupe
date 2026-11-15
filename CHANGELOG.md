@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.19](https://github.com/bo0tzz/loopdedupe/compare/v0.0.18...v0.0.19) (2026-11-15)
+
+
+### Bug Fixes
+
+* **webhook:** drop items that are deleted, transferred or recategorised ([2b9c537](https://github.com/bo0tzz/loopdedupe/commit/2b9c537cfd73ab0305c0f0e3b7981cec4322d3f6))
+
 ## [0.0.18](https://github.com/bo0tzz/loopdedupe/compare/v0.0.17...v0.0.18) (2026-11-03)
 
 
