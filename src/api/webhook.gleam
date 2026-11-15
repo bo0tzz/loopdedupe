@@ -5,6 +5,7 @@ import database/sql
 import github/types as github
 import gleam/dynamic/decode
 import gleam/http.{Post}
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option
@@ -16,6 +17,7 @@ import jobs/backfill
 import jobs/bot_reply
 import jobs/discussion_backfill
 import jobs/embeddings
+import pog
 import snag
 import types.{type Context}
 import wisp.{type Request, type Response}
@@ -116,22 +118,28 @@ fn handle_issue(body: String, ctx: Context) -> Result(String, snag.Snag) {
     json.parse(body, github.issue_webhook_decoder())
     |> snag.map_error(string.inspect),
   )
-  use _ <- result.try(
-    item.upsert(ctx.db, sql.Issue, webhook.item)
-    |> snag.map_error(string.inspect),
-  )
-  use _ <- result.try(
-    embeddings.enqueue(
-      ctx.db,
-      webhook.item.github_id,
-      webhook.item.title,
-      webhook.item.body,
-    )
-    |> snag.map_error(string.inspect),
-  )
-  invalidate_rerank_for(ctx, webhook.item.github_id)
-  refresh_canonical_on_close(ctx, webhook.action, IssueKind, webhook.item)
-  Ok("OK")
+  case webhook.action {
+    "deleted" | "transferred" ->
+      remove(ctx, sql.Issue, webhook.item, "removed — " <> webhook.action)
+    _ -> {
+      use _ <- result.try(
+        item.upsert(ctx.db, sql.Issue, webhook.item)
+        |> snag.map_error(string.inspect),
+      )
+      use _ <- result.try(
+        embeddings.enqueue(
+          ctx.db,
+          webhook.item.github_id,
+          webhook.item.title,
+          webhook.item.body,
+        )
+        |> snag.map_error(string.inspect),
+      )
+      invalidate_rerank_for(ctx, webhook.item.github_id)
+      refresh_canonical_on_close(ctx, webhook.action, IssueKind, webhook.item)
+      Ok("OK")
+    }
+  }
 }
 
 fn handle_discussion(body: String, ctx: Context) -> Result(String, snag.Snag) {
@@ -139,9 +147,19 @@ fn handle_discussion(body: String, ctx: Context) -> Result(String, snag.Snag) {
     json.parse(body, github.discussion_webhook_decoder())
     |> snag.map_error(string.inspect),
   )
-  case webhook.category_slug == feature_request_slug {
-    False -> Ok("ignored — not feature-request category")
-    True -> {
+  case webhook.action, webhook.category_slug == feature_request_slug {
+    "deleted", _ | "transferred", _ ->
+      remove(ctx, sql.Discussion, webhook.item, "removed — " <> webhook.action)
+    // Also how a discussion moved out of feature-request (category_changed)
+    // leaves the corpus. For one that was never in it, nothing matches.
+    _, False ->
+      remove(
+        ctx,
+        sql.Discussion,
+        webhook.item,
+        "ignored — not feature-request category",
+      )
+    _, True -> {
       use _ <- result.try(
         item.upsert(ctx.db, sql.Discussion, webhook.item)
         |> snag.map_error(string.inspect),
@@ -165,6 +183,29 @@ fn handle_discussion(body: String, ctx: Context) -> Result(String, snag.Snag) {
       Ok("OK")
     }
   }
+}
+
+// For an item that's gone from the repo or from the tracked category. An
+// upsert would keep it in the corpus indefinitely, since nothing else ever
+// removes items.
+fn remove(
+  ctx: Context,
+  kind: sql.ItemType,
+  item: github.Item,
+  message: String,
+) -> Result(String, snag.Snag) {
+  use pog.Returned(count, _) <- result.try(
+    sql.delete_item(ctx.db, item.github_id, kind)
+    |> snag.map_error(string.inspect),
+  )
+  case count {
+    0 -> Nil
+    _ ->
+      wisp.log_info(
+        "removed #" <> int.to_string(item.number) <> " from the corpus",
+      )
+  }
+  Ok(message)
 }
 
 type Kind {

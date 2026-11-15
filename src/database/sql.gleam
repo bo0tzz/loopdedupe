@@ -633,6 +633,34 @@ LIMIT $1;
   |> pog.execute(db)
 }
 
+/// For an item that left the repo or the tracked category. Its embedding,
+/// edges, rerank scores and judgments go with it (ON DELETE CASCADE). The
+/// type is part of the key because issue ids and discussion ids are separate
+/// sequences.
+///
+/// > 🐿️ This function was generated automatically using v4.7.0 of
+/// > the [squirrel package](https://github.com/giacomocavalieri/squirrel).
+///
+pub fn delete_item(
+  db: pog.Connection,
+  github_id: Int,
+  arg_2: ItemType,
+) -> Result(pog.Returned(Nil), pog.QueryError) {
+  let decoder = decode.map(decode.dynamic, fn(_) { Nil })
+
+  "-- For an item that left the repo or the tracked category. Its embedding,
+-- edges, rerank scores and judgments go with it (ON DELETE CASCADE). The
+-- type is part of the key because issue ids and discussion ids are separate
+-- sequences.
+DELETE FROM items WHERE github_id = $1 AND item_type = $2;
+"
+  |> pog.query
+  |> pog.parameter(pog.int(github_id))
+  |> pog.parameter(item_type_encoder(arg_2))
+  |> pog.returning(decoder)
+  |> pog.execute(db)
+}
+
 /// Runs the `delete_judgment` query
 /// defined in `./src/database/sql/delete_judgment.sql`.
 ///
